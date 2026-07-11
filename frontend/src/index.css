@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #f6f7fb;
+  color: #1e2433;
+}
+
+/* Utility: role accent ring, used on avatars/badges to color-code whose area you're in */
+.role-ring-superuser { box-shadow: 0 0 0 2px #6b46c1; }
+.role-ring-manager { box-shadow: 0 0 0 2px #2b3a67; }
+.role-ring-teacher { box-shadow: 0 0 0 2px #0d9488; }
+
+/* Table figures (scores) get tabular-nums so columns align */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* Subtle focus ring for accessibility — form fields are excluded here since
+   they already show their own focus state via a border color change (see
+   .form-field below); without this exclusion the two focus indicators would
+   stack into what looks like a double border. */
+:focus-visible:not(.form-field) {
+  outline: 2px solid #5b74ab;
+  outline-offset: 2px;
+}
+.form-field:focus-visible {
+  outline: none;
+}
+
+/* --- Printable reports ---------------------------------------------------
+   #print-root stays out of the way on screen. When printing, it's the only
+   thing on the page: everything else is hidden via the visibility trick so
+   layout/positioning of the app underneath doesn't leak onto the page. */
+#print-root {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-root,
+  #print-root * {
+    visibility: visible;
+  }
+  #print-root {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  /* The report card is black-and-white only (no background fills, no
+     colored text) so it always prints correctly on B&W printers. This rule
+     is kept as a safety net in case any color slips in later, and forces
+     black text everywhere regardless of what's set inline. (Chrome/Edge
+     honor -webkit-print-color-adjust; Firefox users may still need to
+     enable "Print backgrounds" in the print dialog.) */
+  #print-root * {
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+}
+
+/* Report tables: plain, black, no color — used both on screen for the
+   report views and inside the printable area. */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #000;
+  background: #fff;
+  font-size: 13px;
+}
+.report-table th,
+.report-table td {
+  border: 1px solid #000;
+  padding: 8px 12px;
+  text-align: left;
+  color: #000;
+  vertical-align: middle;
+}
+.report-table th {
+  font-weight: 700;
+  background: #fff;
+}
+.report-page {
+  page-break-after: always;
+  break-after: page;
+  padding-bottom: 12px;
+}
+.report-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+
+/* One report card = one printed page. Sizing/spacing above is intentionally
+   compact (small fonts, tight padding) so a typical module list fits
+   comfortably within A4 minus the 12mm @page margin — the actual page-break
+   protection below is what stops any section from being cut mid-way if
+   content does run long. */
+.report-card-page {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* Applied to the banner, panels, table rows, remarks and the signature row
+   so a page break can never land in the middle of one of them — this is
+   what prevents a "collapsed" row (a table row with its border on one page
+   and its text on the next) when printing or exporting to PDF. */
+.report-avoid-break {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+tr.report-avoid-break {
+  display: table-row;
+}
+
+.report-section-label {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  page-break-after: avoid;
+  break-after: avoid;
+}
