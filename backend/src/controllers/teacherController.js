@@ -74,6 +74,76 @@ const getTeacherTempPassword = asyncHandler(async (req, res) => {
   });
 });
 
+// POST /api/teachers/:id/reset-password — a manager forces a brand new
+// temporary password for a teacher who forgot theirs. Unlike
+// getTeacherTempPassword (which only recovers a still-unused temp password),
+// this works even after the teacher already changed their password once,
+// since it issues a new one rather than just decrypting the old one.
+const resetTeacherPassword = asyncHandler(async (req, res) => {
+  const teacher = await User.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+  });
+  if (!teacher) throw ApiError.notFound("Teacher not found");
+
+  const tempPassword = generateTempPassword();
+  teacher.passwordHash = await bcrypt.hash(tempPassword, 10);
+  teacher.mustChangePassword = true;
+  teacher.tempPasswordEncrypted = encryptTempPassword(tempPassword);
+  teacher.tempPasswordSetAt = new Date();
+  teacher.tempPasswordSetBy = req.user.id;
+  // Invalidate any token(s) already issued to this teacher — otherwise a
+  // still-open session (or one they never logged out of) would keep working
+  // right up until they happen to log out, even though their password just
+  // changed out from under them.
+  teacher.tokenVersion += 1;
+  await teacher.save();
+
+  res.json({
+    teacher: { id: teacher.id, name: teacher.name, email: teacher.email },
+    temporaryPassword: tempPassword,
+  });
+});
+
+// DELETE /api/teachers/:id — a manager permanently removes a teacher account.
+// Blocked if the teacher has recorded any marks: those marks are graded work
+// tied to real students and terms, and deleting the teacher out from under
+// them would either orphan that data or silently destroy it. If a teacher
+// truly needs to go despite recorded marks, deactivate them instead (see
+// updateTeacherStatus) — that revokes access without losing academic
+// records.
+const deleteTeacher = asyncHandler(async (req, res) => {
+  const { Mark, Class, TeacherModuleAssignment, sequelize } = require("../models");
+
+  const teacher = await User.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+  });
+  if (!teacher) throw ApiError.notFound("Teacher not found");
+
+  const recordedMarksCount = await Mark.count({ where: { recordedBy: teacher.id } });
+  if (recordedMarksCount > 0) {
+    throw ApiError.conflict(
+      `${teacher.name} has recorded ${recordedMarksCount} mark${
+        recordedMarksCount > 1 ? "s" : ""
+      } and can't be deleted. Deactivate the account instead to revoke access while keeping their academic records intact.`
+    );
+  }
+
+  await sequelize.transaction(async (t) => {
+    // No marks exist, so any module assignments this teacher held are safe
+    // to clear — otherwise they'd be left pointing at a deleted user.
+    await TeacherModuleAssignment.destroy({ where: { teacherId: teacher.id }, transaction: t });
+    // Likewise, if they were set as a class's homeroom/class teacher,
+    // clear that reference rather than leave it dangling.
+    await Class.update(
+      { classTeacherId: null },
+      { where: { classTeacherId: teacher.id }, transaction: t }
+    );
+    await teacher.destroy({ transaction: t });
+  });
+
+  res.json({ message: "Teacher deleted successfully" });
+});
+
 // PATCH /api/teachers/:id/status — a manager activates or deactivates a
 // teacher account within their own school. A deactivated ("suspended")
 // teacher is rejected on their very next request: authenticate() re-checks
@@ -98,4 +168,11 @@ const updateTeacherStatus = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { createTeacher, listTeachers, getTeacherTempPassword, updateTeacherStatus };
+module.exports = {
+  createTeacher,
+  listTeachers,
+  getTeacherTempPassword,
+  resetTeacherPassword,
+  updateTeacherStatus,
+  deleteTeacher,
+};

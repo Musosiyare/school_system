@@ -1,4 +1,14 @@
-const { Class, ClassModule, Module, User, AcademicYear, Mark } = require("../models");
+const {
+  Class,
+  ClassModule,
+  Module,
+  User,
+  AcademicYear,
+  Mark,
+  Student,
+  Term,
+  TeacherModuleAssignment,
+} = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 
@@ -112,4 +122,77 @@ const assignClassTeacher = asyncHandler(async (req, res) => {
   res.json({ class: klass });
 });
 
-module.exports = { createClass, listClasses, getClass, setClassModules, assignClassTeacher };
+// GET /api/classes/:id/incomplete-marks?termId= — for the class teacher (or a
+// manager) to see, per module taught in this class, how many students still
+// don't have a mark recorded for the given term. This is what powers the
+// "who hasn't finished recording marks yet" view so a class teacher can send
+// a reminder to the responsible subject teacher.
+const getIncompleteMarks = asyncHandler(async (req, res) => {
+  const { termId } = req.query;
+  if (!termId) throw ApiError.badRequest("termId query param is required");
+
+  const klass = await Class.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId },
+    include: [{ model: ClassModule, include: [Module] }],
+  });
+  if (!klass) throw ApiError.notFound("Class not found");
+
+  // Teachers may only pull this for a class they're the class teacher of;
+  // managers can view any class in their school.
+  if (req.user.role === "teacher" && klass.classTeacherId !== req.user.id) {
+    throw ApiError.forbidden("You are not the class teacher for this class");
+  }
+
+  const term = await Term.findOne({ where: { id: termId } });
+  if (!term) throw ApiError.badRequest("Invalid termId");
+
+  const totalStudents = await Student.count({ where: { classId: klass.id } });
+  const moduleIds = klass.ClassModules.map((cm) => cm.moduleId);
+
+  const [assignments, marks] = await Promise.all([
+    moduleIds.length
+      ? TeacherModuleAssignment.findAll({
+          where: { classId: klass.id, moduleId: moduleIds },
+          include: [{ model: User, as: "teacher", attributes: ["id", "name", "email"] }],
+        })
+      : [],
+    moduleIds.length
+      ? Mark.findAll({ where: { classId: klass.id, moduleId: moduleIds, termId }, attributes: ["moduleId"] })
+      : [],
+  ]);
+
+  const assignmentByModule = Object.fromEntries(assignments.map((a) => [a.moduleId, a]));
+  const recordedCountByModule = {};
+  marks.forEach((m) => {
+    recordedCountByModule[m.moduleId] = (recordedCountByModule[m.moduleId] || 0) + 1;
+  });
+
+  const modules = klass.ClassModules.map((cm) => {
+    const assignment = assignmentByModule[cm.moduleId];
+    const recordedCount = recordedCountByModule[cm.moduleId] || 0;
+    const missingCount = Math.max(totalStudents - recordedCount, 0);
+    return {
+      moduleId: cm.moduleId,
+      moduleTitle: cm.Module.moduleTitle,
+      moduleCode: cm.Module.moduleCode,
+      teacherId: assignment?.teacher?.id || null,
+      teacherName: assignment?.teacher?.name || null,
+      teacherEmail: assignment?.teacher?.email || null,
+      totalStudents,
+      recordedCount,
+      missingCount,
+      completed: totalStudents > 0 && missingCount === 0,
+    };
+  }).sort((a, b) => a.moduleTitle.localeCompare(b.moduleTitle));
+
+  res.json({ className: klass.name, termName: term.name, termLocked: term.isLocked, totalStudents, modules });
+});
+
+module.exports = {
+  createClass,
+  listClasses,
+  getClass,
+  setClassModules,
+  assignClassTeacher,
+  getIncompleteMarks,
+};

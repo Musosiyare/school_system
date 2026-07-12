@@ -21,6 +21,25 @@ function toDecision(word) {
   return word;
 }
 
+// Modules arrive pre-grouped by type from the backend (specific, then
+// general, then complementary). This tags the first row of each group with
+// how many rows it should span, so the "Module Type" column can render as
+// one merged cell per group instead of repeating on every row.
+function withTypeGroups(modules) {
+  const counts = {};
+  modules.forEach((m) => {
+    const t = m.type || "general";
+    counts[t] = (counts[t] || 0) + 1;
+  });
+  const seen = {};
+  return modules.map((m) => {
+    const t = m.type || "general";
+    const isFirstOfGroup = !seen[t];
+    seen[t] = true;
+    return { ...m, isFirstOfGroup, groupSize: counts[t] };
+  });
+}
+
 // Overall Result is graded off the weighted average itself, not the plain
 // PASS/FAIL flag: Excellent 80-100, Very Good 70-79, Pass 50-69, else Fail.
 // Mirrors overallGrade() in backend/src/services/pdfService.js.
@@ -102,7 +121,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
               <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>{schoolAddress}</div>
             )}
             {contactLine && (
-              <div style={{ fontSize: 10, color: "#4b5563", marginTop: 2 }}>{contactLine}</div>
+              <div style={{ fontSize: 10, color: "#000", marginTop: 2 }}>{contactLine}</div>
             )}
           </div>
           <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
@@ -121,15 +140,23 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
 
       <SectionLabel>ACADEMIC PERFORMANCE</SectionLabel>
 
-      <table className="report-table report-avoid-break" style={{ marginBottom: 4 }}>
+      <table className="report-table report-avoid-break" style={{ marginBottom: 4, tableLayout: "fixed", width: "100%" }}>
+        <colgroup>
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "13%" }} />
+          <col style={{ width: "38%" }} />
+          <col style={{ width: "11%" }} />
+          <col style={{ width: "10%" }} />
+          <col style={{ width: "12%" }} />
+        </colgroup>
         <thead>
           <tr>
-            <th style={th}>#</th>
-            <th style={th}>Module Code</th>
+            <th style={{ ...center, whiteSpace: "nowrap" }}>Module Type</th>
+            <th style={{ ...th, whiteSpace: "nowrap" }}>Code</th>
             <th style={th}>Module Name</th>
-            <th style={center}>Weight</th>
-            <th style={center}>Score</th>
-            <th style={center}>Decision</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "8px 6px" }}>Weight</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "8px 6px" }}>Score</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "8px 6px" }}>Decision</th>
           </tr>
         </thead>
         <tbody>
@@ -140,29 +167,54 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
               </td>
             </tr>
           )}
-          {report.modules.map((m, idx) => (
+          {withTypeGroups(report.modules).map((m) => (
             <tr key={m.moduleId} className="report-avoid-break">
-
-              <td style={center}>{idx + 1}</td>
-              <td style={{ fontWeight: 700 }}>{m.code || "-"}</td>
+              {m.isFirstOfGroup && (
+                <td
+                  rowSpan={m.groupSize}
+                  style={{
+                    ...center,
+                    verticalAlign: "middle",
+                    padding: "8px 5px",
+                    overflowWrap: "break-word",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 11, textTransform: "capitalize", lineHeight: 1.2 }}>
+                    {m.type || "general"}
+                  </div>
+                  <div style={{ fontSize: 9, fontWeight: 400, marginTop: 3, lineHeight: 1.2 }}>
+                    Passing line {(m.type || "general") === "specific" ? 70 : 50}%
+                  </div>
+                </td>
+              )}
+              <td style={{ fontWeight: 700, whiteSpace: "nowrap", padding: "8px 10px" }}>{m.code || "-"}</td>
               <td>{m.title}</td>
-              <td style={center}>{m.weight}</td>
-              <td style={{ ...center, fontWeight: m.score === null ? 700 : 400 }}>
-                {m.score === null ? "N/A" : `${m.score} / ${m.maxScore}`}
+              <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>{m.weight}</td>
+              <td
+                style={{
+                  ...center,
+                  fontWeight: m.score === null ? 700 : 400,
+                  whiteSpace: "nowrap",
+                  padding: "8px 6px",
+                }}
+              >
+                {m.score === null ? "N/A" : m.score}
               </td>
-              <td style={{ ...center, fontWeight: 700 }}>{toDecision(m.status)}</td>
+              <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>
+                {toDecision(m.status)}
+              </td>
             </tr>
           ))}
           <tr className="report-avoid-break">
             <td colSpan={3} style={{ textAlign: "right", fontWeight: 700 }}>
               TOTAL
             </td>
-            <td style={{ ...center, fontWeight: 700 }}>
+            <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>
               {report.modules.reduce((sum, m) => sum + (m.weight || 0), 0)}
             </td>
-            <td style={{ ...center, fontWeight: 700 }}>
-              {report.modules.reduce((sum, m) => sum + (m.score || 0), 0)} /{" "}
-              {report.modules.reduce((sum, m) => sum + (m.maxScore || 0), 0)}
+            <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>
+              {report.modules.reduce((sum, m) => sum + (m.score || 0), 0)}
             </td>
             <td></td>
           </tr>
@@ -172,7 +224,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
       {report.modules.some((m) => m.score === null) && (
         <div
           className="report-avoid-break"
-          style={{ fontSize: 7, color: "#4b5563", fontStyle: "italic", marginBottom: 4 }}
+          style={{ fontSize: 7, color: "#000", fontStyle: "italic", marginBottom: 4 }}
         >
           N/A = mark not yet recorded for that module. It does not count against the student and has no effect on
           the weighted average or overall result below.
@@ -215,20 +267,21 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
       <div className="report-avoid-break" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 11 }}>{report.classTeacherName || "Not assigned"}</div>
-          <div style={{ fontSize: 8, color: "#4b5563" }}>CLASS TEACHER</div>
+          <div style={{ fontSize: 8, color: "#000" }}>CLASS TEACHER</div>
         </div>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontWeight: 700, fontSize: 11 }}>{report.schoolManagerName || "Not assigned"}</div>
-          <div style={{ fontSize: 8, color: "#4b5563" }}>SCHOOL MANAGER</div>
+          <div style={{ fontSize: 8, color: "#000" }}>SCHOOL MANAGER</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontWeight: 700, fontSize: 11 }}>{report.student?.guardianName || "Not assigned"}</div>
-          <div style={{ fontSize: 8, color: "#4b5563" }}>PARENT/GUARDIAN</div>
+          <div style={{ fontSize: 8, color: "#000" }}>PARENT/GUARDIAN</div>
         </div>
       </div>
 
       {/* Footer: generated date + class name, replacing the per-signature
-          date lines. */}
+          date lines. Intentionally kept a lighter gray — this is a print
+          timestamp, not report content. */}
       <div
         className="report-avoid-break"
         style={{

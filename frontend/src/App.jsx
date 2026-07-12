@@ -1,15 +1,19 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AuthProvider } from "./context/AuthContext";
 import { ConfirmProvider } from "./components/ui/ConfirmProvider";
 import { NotifyProvider } from "./components/ui/NotifyProvider";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 
+import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import ChangePassword from "./pages/ChangePassword";
 import Reports from "./pages/Reports";
 
 import SuperuserDashboard from "./pages/superuser/SuperuserDashboard";
+import SuperuserProfile from "./pages/superuser/SuperuserProfile";
 
 import ManagerDashboard from "./pages/manager/ManagerDashboard";
 import AcademicYears from "./pages/manager/AcademicYears";
@@ -21,17 +25,9 @@ import Assignments from "./pages/manager/Assignments";
 import ManagerProfile from "./pages/manager/ManagerProfile";
 
 import MarksEntry from "./pages/teacher/MarksEntry";
+import MarksStatus from "./pages/teacher/MarksStatus";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherProfile from "./pages/teacher/TeacherProfile";
-
-function HomeRedirect() {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
-  if (user.role === "superuser") return <Navigate to="/superuser" replace />;
-  if (user.role === "manager") return <Navigate to="/manager" replace />;
-  return <Navigate to="/teacher" replace />;
-}
 
 export default function App() {
   return (
@@ -42,14 +38,24 @@ export default function App() {
         <Layout>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/change-password" element={<ChangePassword />} />
-            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/" element={<Landing />} />
 
             <Route
               path="/superuser"
               element={
                 <ProtectedRoute roles={["superuser"]}>
                   <SuperuserDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/superuser/profile"
+              element={
+                <ProtectedRoute roles={["superuser"]}>
+                  <SuperuserProfile />
                 </ProtectedRoute>
               }
             />
@@ -140,6 +146,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["teacher"]}>
                   <MarksEntry />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/teacher/marks-status"
+              element={
+                <ProtectedRoute roles={["teacher"]}>
+                  <MarksStatus />
                 </ProtectedRoute>
               }
             />

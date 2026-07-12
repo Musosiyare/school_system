@@ -66,6 +66,7 @@ async function buildStudentReport(studentId, termId) {
       moduleId: mod.id,
       title: mod.moduleTitle,
       code: mod.moduleCode,
+      type: mod.moduleType,
       teacherName: teacherNameByModule[mod.id] || null,
       score,
       maxScore: mod.maxScore,
@@ -74,6 +75,13 @@ async function buildStudentReport(studentId, termId) {
       status,
     };
   });
+
+  // Grouped by type — specific modules first, then general, then
+  // complementary — so the report table can show one merged "Module Type"
+  // cell spanning each group's rows, instead of repeating the type on every
+  // line.
+  const TYPE_ORDER = { specific: 0, general: 1, complementary: 2 };
+  modules.sort((a, b) => (TYPE_ORDER[a.type] ?? 99) - (TYPE_ORDER[b.type] ?? 99));
 
   const weightedAverage = weightSum > 0 ? +(weightedScoreSum / weightSum).toFixed(2) : null;
   // The overall pass line is itself a weighted average — of each recorded

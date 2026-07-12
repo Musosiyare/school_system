@@ -9,7 +9,19 @@ import { ErrorText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { KeyRound, Plus, Users, Ban, CheckCircle2, Eye, BookOpen, Layers } from "lucide-react";
+import {
+  KeyRound,
+  Plus,
+  Users,
+  Ban,
+  CheckCircle2,
+  Eye,
+  BookOpen,
+  Layers,
+  Trash2,
+  AlertTriangle,
+  ShieldOff,
+} from "lucide-react";
 
 const emptyForm = { name: "", email: "", phone: "" };
 
@@ -21,6 +33,9 @@ export default function Teachers() {
   const [form, setForm] = useState(emptyForm);
   const [credentialsModal, setCredentialsModal] = useState(null);
   const [assignmentsModal, setAssignmentsModal] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null); // teacher being considered for deletion
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [tempPasswordError, setTempPasswordError] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -79,6 +94,27 @@ export default function Teachers() {
     }
   }
 
+  // Issues a brand new temporary password — for when a teacher already
+  // changed their password once (so nothing is left to recover) but has now
+  // forgotten that one too.
+  async function resetPassword(teacher) {
+    const ok = await confirm({
+      title: "Reset this teacher's password?",
+      message: `${teacher.name} will be signed out and must log in with a new temporary password, then set their own.`,
+      confirmText: "Reset password",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setTempPasswordError("");
+    try {
+      const { data } = await api.post(`/teachers/${teacher.id}/reset-password`);
+      await load();
+      setCredentialsModal({ email: teacher.email, temporaryPassword: data.temporaryPassword });
+    } catch (err) {
+      setTempPasswordError(err.message);
+    }
+  }
+
   async function handleToggleStatus(teacher) {
     const deactivating = teacher.status === "active";
     const teacherAssignments = assignmentsFor(teacher.id);
@@ -117,6 +153,29 @@ export default function Teachers() {
     }
   }
 
+  function openDeleteModal(teacher) {
+    setDeleteError("");
+    setDeleteModal(teacher);
+  }
+
+  async function confirmDeleteTeacher() {
+    if (!deleteModal) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      await api.delete(`/teachers/${deleteModal.id}`);
+      setDeleteModal(null);
+      await load();
+    } catch (err) {
+      // Keep the modal open and show the reason inline (e.g. "has recorded
+      // 12 marks and can't be deleted...") instead of a generic top-of-page
+      // banner, so the explanation sits right next to the action that failed.
+      setDeleteError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   function assignmentsFor(teacherId) {
     return assignments.filter((a) => a.teacherId === teacherId);
   }
@@ -143,7 +202,7 @@ export default function Teachers() {
             value={query}
             onChange={setQuery}
             placeholder="Search by name or email..."
-            className="w-64"
+            className="w-full sm:w-64"
           />
         }
       >
@@ -206,7 +265,17 @@ export default function Teachers() {
                         <KeyRound size={14} /> View
                       </Button>
                     ) : (
-                      <span className="text-xs text-slate-400">Password changed</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">Password changed</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => resetPassword(t)}
+                          title="Issue a new temporary password"
+                        >
+                          <KeyRound size={14} /> Reset
+                        </Button>
+                      </div>
                     )}
                   </Td>
                   <Td className="align-top min-w-[140px]">
@@ -228,7 +297,7 @@ export default function Teachers() {
                     )}
                   </Td>
                   <Td className="align-top whitespace-nowrap">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
                       <Button
                         size="sm"
                         variant={t.status === "active" ? "danger" : "primary"}
@@ -236,6 +305,15 @@ export default function Teachers() {
                         title={t.status === "active" ? "Deactivate" : "Activate"}
                       >
                         {t.status === "active" ? <Ban size={14} /> : <CheckCircle2 size={14} />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openDeleteModal(t)}
+                        title="Delete teacher"
+                        className="text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 size={14} />
                       </Button>
                     </div>
                   </Td>
@@ -347,6 +425,73 @@ export default function Teachers() {
                   </div>
                 </div>
               ))}
+            </div>
+          );
+        })()}
+      </Modal>
+
+      <Modal
+        open={!!deleteModal}
+        onClose={() => (deleting ? null : setDeleteModal(null))}
+        title="Delete teacher account"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteModal(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={confirmDeleteTeacher} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete Teacher"}
+            </Button>
+          </>
+        }
+      >
+        {deleteModal && (() => {
+          const teacherAssignments = assignmentsFor(deleteModal.id);
+          return (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-700">
+                    You're about to permanently delete{" "}
+                    <span className="font-semibold text-slate-900">{deleteModal.name}</span>'s account.
+                  </p>
+                  <p className="text-sm text-slate-500 mt-1">This action cannot be undone.</p>
+                </div>
+              </div>
+
+              <ul className="space-y-2 rounded-lg bg-slate-50 border border-slate-200 p-3.5 text-sm text-slate-600">
+                <li className="flex gap-2">
+                  <span className="text-slate-400">•</span>
+                  <span>Blocked automatically if this teacher has recorded any marks.</span>
+                </li>
+                {teacherAssignments.length > 0 && (
+                  <li className="flex gap-2">
+                    <span className="text-slate-400">•</span>
+                    <span>
+                      Currently teaches <span className="font-medium text-slate-800">{teacherAssignments.length}</span>{" "}
+                      module{teacherAssignments.length > 1 ? "s" : ""} — these assignments will be cleared.
+                    </span>
+                  </li>
+                )}
+                <li className="flex gap-2">
+                  <span className="text-slate-400">•</span>
+                  <span>Their login access ends immediately.</span>
+                </li>
+              </ul>
+
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                <ShieldOff size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  If you just need to revoke access without losing their history, use{" "}
+                  <span className="font-medium">Deactivate</span> instead — it's reversible.
+                </span>
+              </div>
+
+              <ErrorText>{deleteError}</ErrorText>
             </div>
           );
         })()}

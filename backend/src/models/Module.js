@@ -12,6 +12,15 @@ Module.init(
     moduleWeight: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 1 },
     maxScore: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 100 },
     passingLine: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 50 },
+    // Drives the passing line: "specific" modules need 70% to pass, while
+    // "general" and "complementary" modules only need 50%. See
+    // moduleController's computePassingLine — passingLine itself is always
+    // derived from this field (and moduleWeight), never entered by hand.
+    moduleType: {
+      type: DataTypes.ENUM("specific", "general", "complementary"),
+      allowNull: false,
+      defaultValue: "general",
+    },
   },
   {
     sequelize,

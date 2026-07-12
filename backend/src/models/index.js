@@ -10,6 +10,7 @@ const Student = require("./Student");
 const Term = require("./Term");
 const Mark = require("./Mark");
 const ReportRemark = require("./ReportRemark");
+const Notification = require("./Notification");
 
 // School -> Users, AcademicYears, Classes, Modules, Students
 School.hasMany(User, { foreignKey: "schoolId" });
@@ -77,6 +78,23 @@ ReportRemark.belongsTo(Student, { foreignKey: "studentId" });
 Term.hasMany(ReportRemark, { foreignKey: "termId" });
 ReportRemark.belongsTo(Term, { foreignKey: "termId" });
 
+// Notifications — teacher-to-teacher reminders, optionally scoped to a
+// class/module/term (e.g. "please finish recording marks").
+User.hasMany(Notification, { as: "sentNotifications", foreignKey: "senderId" });
+Notification.belongsTo(User, { as: "sender", foreignKey: "senderId" });
+
+User.hasMany(Notification, { as: "receivedNotifications", foreignKey: "recipientId" });
+Notification.belongsTo(User, { as: "recipient", foreignKey: "recipientId" });
+
+Class.hasMany(Notification, { foreignKey: "classId" });
+Notification.belongsTo(Class, { foreignKey: "classId" });
+
+Module.hasMany(Notification, { foreignKey: "moduleId" });
+Notification.belongsTo(Module, { foreignKey: "moduleId" });
+
+Term.hasMany(Notification, { foreignKey: "termId" });
+Notification.belongsTo(Term, { foreignKey: "termId" });
+
 module.exports = {
   sequelize,
   School,
@@ -90,4 +108,5 @@ module.exports = {
   Term,
   Mark,
   ReportRemark,
+  Notification,
 };

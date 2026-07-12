@@ -184,12 +184,12 @@ export default function Students() {
         <Card
           title={`Students in ${selectedClass?.name || ""}`}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
               <SearchInput
                 value={query}
                 onChange={setQuery}
                 placeholder="Search by name, ID, or guardian..."
-                className="w-64"
+                className="w-full sm:w-64"
               />
               <Button size="sm" variant="ghost" onClick={downloadStudentListPdf} disabled={students.length === 0}>
                 <FileDown size={14} /> Download List (PDF)
@@ -241,25 +241,25 @@ export default function Students() {
                     )}
                   </Td>
                   <Td>
-                    <div className="flex justify-end gap-1">
-                      <button
-                        type="button"
-                        title="Delete"
-                        aria-label="Delete"
-                        onClick={() => handleDelete(s)}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-600"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                      <button
-                        type="button"
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
                         title="Edit"
                         aria-label="Edit"
                         onClick={() => openEdit(s)}
-                        className="p-1.5 rounded hover:bg-green-50 text-green-600"
                       >
-                        <Pencil size={16} />
-                      </button>
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        title="Delete"
+                        aria-label="Delete"
+                        onClick={() => handleDelete(s)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
                     </div>
                   </Td>
                 </tr>

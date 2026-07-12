@@ -15,10 +15,10 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem("user");
   }, [user]);
 
-  async function login(email, password) {
+  async function login(identifier, password) {
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/login", { email, password });
+      const { data } = await api.post("/auth/login", { identifier, password });
       localStorage.setItem("token", data.token);
       setUser(data.user);
       return data.user;

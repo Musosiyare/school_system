@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import api from "../../api/client";
-import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
@@ -23,6 +22,7 @@ import {
   Mail,
   Phone,
   UserCircle2,
+  ChevronDown,
 } from "lucide-react";
 
 const emptyForm = {
@@ -60,6 +60,9 @@ export default function SuperuserDashboard() {
   const [stats, setStats] = useState(null);
   const [statsError, setStatsError] = useState("");
   const [schoolQuery, setSchoolQuery] = useState("");
+  // Both sections start collapsed; each can be expanded via its chevron trigger.
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showAllSchools, setShowAllSchools] = useState(false);
 
   async function loadSchools() {
     const { data } = await api.get("/schools");
@@ -139,6 +142,31 @@ export default function SuperuserDashboard() {
     }
   }
 
+  // Issues a brand new temporary password for the school's manager — for when
+  // they already changed their password once (nothing left to recover) but
+  // have now forgotten that one too.
+  async function resetManagerPassword(school) {
+    const ok = await confirm({
+      title: "Reset this manager's password?",
+      message: `${school.managerName || "This manager"} will be signed out and must log in with a new temporary password, then set their own.`,
+      confirmText: "Reset password",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setListError("");
+    try {
+      const { data } = await api.post(`/schools/${school.id}/reset-manager-credentials`);
+      await loadSchools();
+      setCredentialsModal({
+        heading: `Manager credentials — ${school.name}`,
+        email: data.manager.email,
+        temporaryPassword: data.manager.temporaryPassword,
+      });
+    } catch (err) {
+      setListError(err.message);
+    }
+  }
+
   async function viewTempPassword(school) {
     setListError("");
     try {
@@ -201,51 +229,78 @@ export default function SuperuserDashboard() {
             <StatCard icon={<Layers size={18} />} label="Classes" value={stats.totals.totalClasses} />
           </div>
 
-          <Card title="Per-School Breakdown">
-            <div className="overflow-x-auto">
-              <Table>
-                <Thead>
-                  <tr>
-                    <Th>School</Th>
-                    <Th>Status</Th>
-                    <Th>Active Teachers</Th>
-                    <Th>Active Students</Th>
-                    <Th>Classes</Th>
-                  </tr>
-                </Thead>
-                <tbody>
-                  {stats.perSchool.length === 0 && (
-                    <EmptyRow colSpan={5}>No schools registered yet.</EmptyRow>
-                  )}
-                  {stats.perSchool.map((row) => (
-                    <tr key={row.id}>
-                      <Td className="font-medium text-slate-800">{row.name}</Td>
-                      <Td>
-                        <Badge tone={row.status === "active" ? "pass" : "fail"}>{row.status}</Badge>
-                      </Td>
-                      <Td>{row.activeTeachers}</Td>
-                      <Td>{row.activeStudents}</Td>
-                      <Td>{row.classes}</Td>
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-4 hover:bg-slate-50 transition text-left"
+            >
+              <h3 className="text-base font-semibold text-slate-800">Per-School Breakdown</h3>
+              <ChevronDown
+                size={18}
+                className={`shrink-0 text-slate-400 transition-transform ${showBreakdown ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {showBreakdown && (
+              <div className="px-4 sm:px-6 pb-6 overflow-x-auto">
+                <Table>
+                  <Thead>
+                    <tr>
+                      <Th>School</Th>
+                      <Th>Status</Th>
+                      <Th>Active Teachers</Th>
+                      <Th>Active Students</Th>
+                      <Th>Classes</Th>
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
-          </Card>
+                  </Thead>
+                  <tbody>
+                    {stats.perSchool.length === 0 && (
+                      <EmptyRow colSpan={5}>No schools registered yet.</EmptyRow>
+                    )}
+                    {stats.perSchool.map((row) => (
+                      <tr key={row.id}>
+                        <Td className="font-medium text-slate-800">{row.name}</Td>
+                        <Td>
+                          <Badge tone={row.status === "active" ? "pass" : "fail"}>{row.status}</Badge>
+                        </Td>
+                        <Td>{row.activeTeachers}</Td>
+                        <Td>{row.activeStudents}</Td>
+                        <Td>{row.classes}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+          </div>
         </>
       )}
 
-      <Card
-        title="All Schools"
-        actions={
-          <SearchInput
-            value={schoolQuery}
-            onChange={setSchoolQuery}
-            placeholder="Search by school, manager, or email..."
-            className="w-64"
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowAllSchools((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-4 hover:bg-slate-50 transition text-left"
+        >
+          <h3 className="text-base font-semibold text-slate-800">All Schools</h3>
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-slate-400 transition-transform ${showAllSchools ? "rotate-180" : ""}`}
           />
-        }
-      >
+        </button>
+
+        {showAllSchools && (
+          <div className="px-4 sm:px-6 pb-6">
+            <div className="mb-4" onClick={(e) => e.stopPropagation()}>
+              <SearchInput
+                value={schoolQuery}
+                onChange={setSchoolQuery}
+                placeholder="Search by school, manager, or email..."
+                className="w-full sm:w-64"
+              />
+            </div>
+
         <ErrorText>{listError}</ErrorText>
 
         {schools.length === 0 ? (
@@ -319,7 +374,17 @@ export default function SuperuserDashboard() {
                       <KeyRound size={14} /> Temp password
                     </Button>
                   ) : (
-                    <span className="text-xs text-slate-400">Password changed</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">Password changed</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => resetManagerPassword(s)}
+                        title="Issue a new temporary password"
+                      >
+                        <KeyRound size={14} /> Reset
+                      </Button>
+                    </div>
                   )}
                   <Button
                     size="sm"
@@ -334,7 +399,9 @@ export default function SuperuserDashboard() {
             ))}
           </div>
         )}
-      </Card>
+          </div>
+        )}
+      </div>
 
       <Modal
         open={creating}

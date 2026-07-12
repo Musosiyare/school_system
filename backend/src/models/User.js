@@ -34,6 +34,13 @@ User.init(
     // what actually ends the session server-side instead of just relying on
     // the client to forget its token.
     tokenVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    // "Forgot password" (self-service, no admin involved) — currently only
+    // offered to superuser accounts, since managers/teachers already have an
+    // admin above them who can reset their password directly. We only ever
+    // store a hash of the token (like a password), never the raw value, so a
+    // database leak doesn't hand out working reset links.
+    resetTokenHash: { type: DataTypes.STRING, allowNull: true },
+    resetTokenExpiresAt: { type: DataTypes.DATE, allowNull: true },
   },
   { sequelize, modelName: "User", tableName: "users" }
 );

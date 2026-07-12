@@ -78,6 +78,12 @@ function toDecision(word) {
   return word;
 }
 
+// "specific" -> "Specific", used for the module Type column on the report.
+function capitalize(word) {
+  if (!word) return "";
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
 // Overall Result is graded off the weighted average itself, not the plain
 // PASS/FAIL flag: Excellent 80-100, Very Good 70-79, Pass 50-69, else Fail.
 function overallGrade(weightedAverage) {
@@ -144,7 +150,7 @@ function letterhead(schoolName, schoolAddress, termName, admissionNumber, report
                     ? {
                         text: contactLine,
                         fontSize: 9,
-                        color: "#4b5563",
+                        color: BLACK,
                         margin: [0, 2, 0, 0],
                       }
                     : null,
@@ -195,6 +201,21 @@ function letterhead(schoolName, schoolAddress, termName, admissionNumber, report
 // Performance" grid, using our real modules instead of generic subjects).
 // Kept strictly black-and-white — plain black grid lines, no color fills —
 // since this is the official scored data on the report. ----------
+// Same plain black grid as blackGridLayout, but with tighter left/right
+// padding — used only for the Academic Performance table, where several
+// columns (Module Code, Decision) are narrow and need the extra room more
+// than they need whitespace.
+const moduleTableLayout = {
+  hLineWidth: () => 1,
+  vLineWidth: () => 1,
+  hLineColor: () => BLACK,
+  vLineColor: () => BLACK,
+  paddingLeft: () => 4,
+  paddingRight: () => 4,
+  paddingTop: () => 6,
+  paddingBottom: () => 6,
+};
+
 function moduleTable(modules) {
   const headerCell = (text, alignment) => ({
     text,
@@ -204,10 +225,10 @@ function moduleTable(modules) {
   });
   const body = [
     [
-      headerCell("#", "center"),
+      headerCell("Module Type", "center"),
       headerCell("Module Code"),
       headerCell("Module Name"),
-      headerCell("Weight", "center"),
+      headerCell("Weight/Marks", "center"),
       headerCell("Score", "center"),
       headerCell("Decision", "center"),
     ],
@@ -217,38 +238,64 @@ function moduleTable(modules) {
     body.push([{ text: "No modules assigned to this class.", colSpan: 6, alignment: "center" }, {}, {}, {}, {}, {}]);
   }
 
-  modules.forEach((m, idx) => {
+  // Modules arrive pre-grouped by type (specific, then general, then
+  // complementary) from reportService, so a run of same-type modules is
+  // always contiguous — that's what lets rowSpan merge them into one
+  // "Module Type" cell per group instead of repeating it on every row.
+  const typeGroupSizes = {};
+  modules.forEach((m) => {
+    const t = m.type || "general";
+    typeGroupSizes[t] = (typeGroupSizes[t] || 0) + 1;
+  });
+  const seenTypes = {};
+
+  modules.forEach((m) => {
+    const t = m.type || "general";
+    const isFirstOfGroup = !seenTypes[t];
+    seenTypes[t] = true;
+
+    const passPct = t === "specific" ? 70 : 50;
+    const typeCell = isFirstOfGroup
+      ? {
+          stack: [
+            { text: capitalize(t), bold: true, fontSize: 9 },
+            { text: `Passing line ${passPct}%`, fontSize: 7.5, color: "#444444", margin: [0, 1, 0, 0] },
+          ],
+          rowSpan: typeGroupSizes[t],
+          alignment: "center",
+        }
+      : {};
+
     body.push([
-      { text: String(idx + 1), alignment: "center", fontSize: 9 },
-      { text: m.code || "-", bold: true, fontSize: 9 },
+      typeCell,
+      { text: m.code || "-", bold: true, fontSize: 8.5, noWrap: true },
       { text: m.title, fontSize: 9 },
-      { text: String(m.weight), alignment: "center", fontSize: 9 },
-      { text: m.score === null ? "N/A" : `${m.score} / ${m.maxScore}`, alignment: "center", fontSize: 9 },
+      { text: String(m.weight), alignment: "center", fontSize: 9, bold: true },
+      { text: m.score === null ? "N/A" : String(m.score), alignment: "center", fontSize: 9 },
       { text: toDecision(m.status), alignment: "center", bold: true, fontSize: 9 },
     ]);
   });
 
   const totalWeight = modules.reduce((sum, m) => sum + (m.weight || 0), 0);
   const totalScore = modules.reduce((sum, m) => sum + (m.score || 0), 0);
-  const totalMaxScore = modules.reduce((sum, m) => sum + (m.maxScore || 0), 0);
   body.push([
     { text: "TOTAL", bold: true, colSpan: 3, alignment: "right", fontSize: 9 }, {}, {},
     { text: String(totalWeight), bold: true, alignment: "center", fontSize: 9 },
-    { text: `${totalScore} / ${totalMaxScore}`, bold: true, alignment: "center", fontSize: 9 },
+    { text: String(totalScore), bold: true, alignment: "center", fontSize: 9 },
     { text: "", alignment: "center" },
   ]);
 
   return {
     table: {
       headerRows: 1,
-      widths: ["auto", "auto", "*", "auto", "auto", "auto"],
+      widths: [60, 60, "*", 50, 34, 40],
       // dontBreakRows keeps every row intact — a row can't be split across a
       // page boundary, which is the usual cause of a report looking
       // "collapsed" when printed.
       dontBreakRows: true,
       body,
     },
-    layout: blackGridLayout,
+    layout: moduleTableLayout,
     margin: [0, 0, 0, 4],
   };
 }
@@ -262,7 +309,7 @@ function naNote(modules) {
     text: "N/A = mark not yet recorded for that module. It does not count against the student and has no effect on the weighted average or overall result below.",
     italics: true,
     fontSize: 6.5,
-    color: "#4b5563",
+    color: BLACK,
     margin: [0, 0, 0, 4],
   };
 }
@@ -325,13 +372,13 @@ function remarksAndSignatures(report, schoolManagerName) {
           {
             stack: [
               { text: report.classTeacherName || "Not assigned", bold: true, fontSize: 10 },
-              { text: "CLASS TEACHER", fontSize: 7, color: "#4b5563", margin: [0, 1, 0, 0] },
+              { text: "CLASS TEACHER", fontSize: 7, color: BLACK, margin: [0, 1, 0, 0] },
             ],
           },
           {
             stack: [
               { text: schoolManagerName || "Not assigned", bold: true, fontSize: 10, alignment: "center" },
-              { text: "SCHOOL MANAGER", fontSize: 7, color: "#4b5563", alignment: "center", margin: [0, 1, 0, 0] },
+              { text: "SCHOOL MANAGER", fontSize: 7, color: BLACK, alignment: "center", margin: [0, 1, 0, 0] },
             ],
           },
           {
@@ -342,7 +389,7 @@ function remarksAndSignatures(report, schoolManagerName) {
                 fontSize: 10,
                 alignment: "right",
               },
-              { text: "PARENT/GUARDIAN", fontSize: 7, color: "#4b5563", alignment: "right", margin: [0, 1, 0, 0] },
+              { text: "PARENT/GUARDIAN", fontSize: 7, color: BLACK, alignment: "right", margin: [0, 1, 0, 0] },
             ],
           },
         ],

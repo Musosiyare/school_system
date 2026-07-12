@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useConfirm } from "./ui/ConfirmProvider";
+import NotificationBell from "./NotificationBell";
 import {
   School,
   LayoutDashboard,
@@ -13,6 +14,7 @@ import {
   ClipboardList,
   PencilLine,
   FileText,
+  BellRing,
   UserCog,
   LogOut,
   Menu,
@@ -31,7 +33,10 @@ const ROLE_META = {
 };
 
 const NAV = {
-  superuser: [{ to: "/superuser", label: "Schools", icon: School }],
+  superuser: [
+    { to: "/superuser", label: "Schools", icon: School },
+    { to: "/superuser/profile", label: "Profile", icon: UserCog },
+  ],
   manager: [
     { to: "/manager", label: "Dashboard", icon: LayoutDashboard },
     { to: "/manager/academic-years", label: "Academic Years", icon: CalendarRange },
@@ -46,6 +51,7 @@ const NAV = {
   teacher: [
     { to: "/teacher", label: "Dashboard", icon: LayoutDashboard },
     { to: "/teacher/marks", label: "Record Marks", icon: PencilLine },
+    { to: "/teacher/marks-status", label: "Marks Status", icon: BellRing },
     { to: "/teacher/reports", label: "Reports", icon: FileText },
     { to: "/teacher/profile", label: "Profile", icon: UserCog },
   ],
@@ -55,6 +61,7 @@ const NAV = {
 // plain string or a fn(user) for pages that personalize the greeting.
 const PAGE_META = {
   "/superuser": { title: "Schools", subtitle: "Every school on the platform.", icon: School },
+  "/superuser/profile": { title: "Profile", subtitle: "Manage your account settings.", icon: UserCog },
   "/manager": {
     title: (user) => `Welcome back, ${user.name?.split(" ")[0] || ""}`,
     subtitle: "Here's your school at a glance.",
@@ -82,6 +89,11 @@ const PAGE_META = {
     icon: LayoutDashboard,
   },
   "/teacher/marks": { title: "Record Marks", subtitle: "Enter or update scores for your modules.", icon: PencilLine },
+  "/teacher/marks-status": {
+    title: "Marks Status",
+    subtitle: "Who hasn't finished recording marks yet.",
+    icon: BellRing,
+  },
   "/teacher/reports": { title: "Reports", subtitle: "Class rankings and report cards.", icon: FileText },
   "/teacher/profile": { title: "Profile", subtitle: "Manage your account settings.", icon: UserCog },
 };
@@ -263,6 +275,8 @@ export default function Layout({ children }) {
               <p className="hidden sm:block text-xs text-slate-500 truncate">{pageMeta.subtitle}</p>
             )}
           </div>
+
+          {(user.role === "teacher" || user.role === "manager") && <NotificationBell />}
 
           <div
             className={`hidden md:flex items-center gap-2 rounded-lg ${meta.tint} border px-3 py-1.5 text-xs font-medium ${meta.text}`}

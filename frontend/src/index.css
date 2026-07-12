@@ -2,9 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   background: #f6f7fb;
   color: #1e2433;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+#root {
+  overflow-x: clip;
 }
 
 /* Utility: role accent ring, used on avatars/badges to color-code whose area you're in */
@@ -87,6 +97,8 @@ body {
   text-align: left;
   color: #000;
   vertical-align: middle;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .report-table th {
   font-weight: 700;
@@ -110,6 +122,11 @@ body {
 .report-card-page {
   page-break-inside: avoid;
   break-inside: avoid;
+  /* Below this width the six-column table has no room left to shrink
+     without wrapping and overlapping — so on phones we keep it at a
+     legible fixed size and let the surrounding .overflow-x-auto wrapper
+     (see Reports.jsx) provide horizontal scrolling instead. */
+  min-width: 680px;
 }
 
 /* Applied to the banner, panels, table rows, remarks and the signature row
@@ -129,4 +146,26 @@ tr.report-avoid-break {
   break-inside: avoid;
   page-break-after: avoid;
   break-after: avoid;
+}
+
+/* --- Landing page entrance animation -------------------------------------
+   A single restrained fade-up used only in the hero, staggered via
+   animation-delay on each element. Respects prefers-reduced-motion. */
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.landing-fade-up {
+  animation: landing-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-fade-up {
+    animation: none;
+  }
 }

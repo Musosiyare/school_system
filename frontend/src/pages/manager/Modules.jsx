@@ -9,7 +9,32 @@ import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
 import { Pencil, Trash2, Plus, BookOpen, Layers, ChevronDown, School2 } from "lucide-react";
 
-const emptyForm = { moduleCode: "", moduleTitle: "", moduleWeight: 100, passingLine: 50 };
+const emptyForm = { moduleCode: "", moduleTitle: "", moduleWeight: 100, moduleType: "general" };
+
+const MODULE_TYPE_OPTIONS = [
+  { value: "specific", label: "Specific (70% to pass)" },
+  { value: "general", label: "General (50% to pass)" },
+  { value: "complementary", label: "Complementary (50% to pass)" },
+];
+
+const MODULE_TYPE_BADGE = {
+  specific: "bg-amber-50 text-amber-700 ring-amber-100",
+  general: "bg-sky-50 text-sky-700 ring-sky-100",
+  complementary: "bg-violet-50 text-violet-700 ring-violet-100",
+};
+
+function moduleTypeLabel(type) {
+  return MODULE_TYPE_OPTIONS.find((o) => o.value === type)?.label.split(" (")[0] || "General";
+}
+
+// Mirrors the backend's computePassingLine — used only to preview the
+// passing line in the form before saving; the server always recomputes and
+// owns the real value.
+function previewPassingLine(moduleType, moduleWeight) {
+  const pct = moduleType === "specific" ? 0.7 : 0.5;
+  const weight = Number(moduleWeight) || 0;
+  return +(weight * pct).toFixed(2);
+}
 
 export default function Modules() {
   const confirm = useConfirm();
@@ -77,7 +102,7 @@ export default function Modules() {
         moduleCode: form.moduleCode,
         moduleTitle: form.moduleTitle,
         moduleWeight: Number(form.moduleWeight),
-        passingLine: Number(form.passingLine),
+        moduleType: form.moduleType,
         classIds: selectedClassIds,
       });
 
@@ -98,7 +123,7 @@ export default function Modules() {
       moduleCode: m.moduleCode,
       moduleTitle: m.moduleTitle,
       moduleWeight: m.moduleWeight,
-      passingLine: m.passingLine,
+      moduleType: m.moduleType || "general",
     });
     setEditSelectedClassIds((m.ClassModules || []).map((cm) => cm.classId));
     setEditError("");
@@ -112,7 +137,7 @@ export default function Modules() {
         moduleCode: editForm.moduleCode,
         moduleTitle: editForm.moduleTitle,
         moduleWeight: Number(editForm.moduleWeight),
-        passingLine: Number(editForm.passingLine),
+        moduleType: editForm.moduleType,
       });
 
       // Reconcile class membership. There's no bulk "set classes for this
@@ -218,15 +243,24 @@ export default function Modules() {
           required
         />
       </Field>
-      <Field label="Passing Line">
-        <Input
-          type="number"
-          min="0"
-          max={values.moduleWeight || undefined}
-          value={values.passingLine}
-          onChange={(e) => onChange("passingLine", e.target.value)}
+      <Field label="Module Type">
+        <select
+          value={values.moduleType}
+          onChange={(e) => onChange("moduleType", e.target.value)}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           required
-        />
+        >
+          {MODULE_TYPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Passing Line (auto)">
+        <div className="flex items-center h-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 tabular-nums">
+          {previewPassingLine(values.moduleType, values.moduleWeight)} / {values.moduleWeight || 0}
+        </div>
       </Field>
     </div>
   );
@@ -314,6 +348,13 @@ export default function Modules() {
                         <div className="flex items-center gap-2 flex-wrap text-sm min-w-0">
                           <span className="font-mono text-xs text-slate-500">{m.moduleCode}</span>
                           <span className="font-medium text-slate-700">{m.moduleTitle}</span>
+                          <span
+                            className={`text-[11px] font-medium px-2 py-0.5 rounded-full ring-1 ${
+                              MODULE_TYPE_BADGE[m.moduleType] || MODULE_TYPE_BADGE.general
+                            }`}
+                          >
+                            {moduleTypeLabel(m.moduleType)}
+                          </span>
                           <span className="text-slate-300">·</span>
                           <span className="tabular-nums text-slate-500 text-xs">
                             Weight {m.moduleWeight}

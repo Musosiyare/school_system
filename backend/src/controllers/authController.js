@@ -1,8 +1,16 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { User, School } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { sendPasswordResetEmail } = require("../utils/mailer");
+
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function hashResetToken(rawToken) {
+  return crypto.createHash("sha256").update(rawToken).digest("hex");
+}
 
 function signToken(user) {
   return jwt.sign(
@@ -26,12 +34,19 @@ function signToken(user) {
 }
 
 const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    throw ApiError.badRequest("Email and password are required");
+  // Accept either field name: `identifier` (new) or `email` (legacy callers/
+  // older frontend builds still posting { email, password }). Either one may
+  // actually contain an email address or a phone number.
+  const identifier = (req.body.identifier ?? req.body.email ?? "").trim();
+  const { password } = req.body;
+  if (!identifier || !password) {
+    throw ApiError.badRequest("Email/phone and password are required");
   }
 
-  const user = await User.findOne({ where: { email } });
+  const { Op } = require("sequelize");
+  const user = await User.findOne({
+    where: { [Op.or]: [{ email: identifier }, { phone: identifier }] },
+  });
   if (!user) {
     throw ApiError.unauthorized("Invalid email or password");
   }
@@ -111,17 +126,41 @@ const me = asyncHandler(async (req, res) => {
   res.json({ user: { ...user.toJSON(), schoolName: school?.name || null } });
 });
 
-// PATCH /api/auth/me — self-service profile update. Currently just the
-// display name; email/role changes go through the manager/superuser admin
-// flows instead, since those affect login and permissions.
+// PATCH /api/auth/me — self-service profile update. Name and email; role
+// changes go through the manager/superuser admin flows instead, since those
+// affect permissions rather than identity/contact info.
 const updateProfile = asyncHandler(async (req, res) => {
-  const { name } = req.body;
+  const { name, email } = req.body;
   if (!name || !name.trim()) {
     throw ApiError.badRequest("Name is required", "name");
   }
 
   const user = await User.findByPk(req.user.id);
   if (!user) throw ApiError.notFound("User not found");
+
+  if (email !== undefined) {
+    // Self-service email changes are superuser-only. Managers/teachers get
+    // their email set by whoever created their account (manager/superuser);
+    // letting them change it themselves would let a suspended/departing
+    // staff member quietly redirect their own login identity.
+    if (req.user.role !== "superuser") {
+      throw ApiError.forbidden("Only a superuser can change their own email");
+    }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      throw ApiError.badRequest("Email is required", "email");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      throw ApiError.badRequest("Enter a valid email address", "email");
+    }
+    if (trimmedEmail !== user.email) {
+      const existing = await User.findOne({ where: { email: trimmedEmail } });
+      if (existing && existing.id !== user.id) {
+        throw ApiError.conflict("A user with this email already exists", "email");
+      }
+      user.email = trimmedEmail;
+    }
+  }
 
   user.name = name.trim();
   await user.save();
@@ -138,6 +177,100 @@ const updateProfile = asyncHandler(async (req, res) => {
   });
 });
 
+// Step 1 of "forgot password" — POST /api/auth/forgot-password/verify-name.
+// Superuser only (see note below). Confirms a superuser account exists with
+// this name before moving on to the email step.
+const verifyForgotPasswordName = asyncHandler(async (req, res) => {
+  const name = (req.body.name ?? "").trim();
+  if (!name) {
+    throw ApiError.badRequest("Name is required", "name");
+  }
+
+  const { Op } = require("sequelize");
+  const user = await User.findOne({
+    where: { role: "superuser", name: { [Op.like]: name } },
+  });
+
+  if (!user) {
+    throw ApiError.notFound("No super admin account found with that name");
+  }
+
+  res.json({ verified: true });
+});
+
+// Step 2 — POST /api/auth/forgot-password/verify-email. Confirms the email
+// belongs to the SAME account as the name from step 1, then sends the reset
+// link. This is deliberately scoped to superuser accounts only: managers and
+// teachers already have an admin above them (superuser/manager) who can
+// reset their password directly from the admin screens, so this self-service
+// flow only needs to cover the one role with nobody above it.
+const verifyForgotPasswordEmail = asyncHandler(async (req, res) => {
+  const name = (req.body.name ?? "").trim();
+  const email = (req.body.email ?? "").trim().toLowerCase();
+  if (!name || !email) {
+    throw ApiError.badRequest("Name and email are required");
+  }
+
+  const { Op } = require("sequelize");
+  const user = await User.findOne({
+    where: { role: "superuser", name: { [Op.like]: name } },
+  });
+
+  if (!user || user.email.toLowerCase() !== email) {
+    throw ApiError.badRequest("That email doesn't match the account we found", "email");
+  }
+
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  user.resetTokenHash = hashResetToken(rawToken);
+  user.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await user.save();
+
+  const resetLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${rawToken}`;
+  await sendPasswordResetEmail(user.email, resetLink);
+
+  res.json({ verified: true, message: "Reset link sent to your email." });
+});
+
+// POST /api/auth/reset-password — completes the flow above. Also bumps
+// tokenVersion so any session started before the reset (e.g. by whoever
+// requested it, or an attacker who had the old password) is signed out.
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) {
+    throw ApiError.badRequest("Token and new password are required");
+  }
+  if (newPassword.length < 8) {
+    throw ApiError.badRequest("New password must be at least 8 characters", "newPassword");
+  }
+
+  const tokenHash = hashResetToken(token);
+  const { Op } = require("sequelize");
+  const user = await User.findOne({
+    where: {
+      resetTokenHash: tokenHash,
+      role: "superuser",
+      resetTokenExpiresAt: { [Op.gt]: new Date() },
+    },
+  });
+
+  if (!user) {
+    throw ApiError.badRequest("This reset link is invalid or has expired");
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  user.mustChangePassword = false;
+  user.tempPasswordEncrypted = null;
+  user.tempPasswordSetAt = null;
+  user.tempPasswordSetBy = null;
+  user.passwordChangedAt = new Date();
+  user.resetTokenHash = null;
+  user.resetTokenExpiresAt = null;
+  user.tokenVersion += 1;
+  await user.save();
+
+  res.json({ message: "Password updated successfully. You can now sign in." });
+});
+
 // POST /api/auth/logout — ends the session server-side.
 // JWTs are stateless, so simply deleting the token on the client isn't enough:
 // the same token would still be accepted by the API until it naturally expires.
@@ -152,4 +285,13 @@ const logout = asyncHandler(async (req, res) => {
   res.json({ message: "Logged out" });
 });
 
-module.exports = { login, changePassword, me, updateProfile, logout };
+module.exports = {
+  login,
+  changePassword,
+  me,
+  updateProfile,
+  logout,
+  verifyForgotPasswordName,
+  verifyForgotPasswordEmail,
+  resetPassword,
+};

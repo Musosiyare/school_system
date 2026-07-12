@@ -185,6 +185,11 @@ const resetManagerCredentials = asyncHandler(async (req, res) => {
   manager.tempPasswordEncrypted = encryptTempPassword(tempPassword);
   manager.tempPasswordSetAt = new Date();
   manager.tempPasswordSetBy = req.user.id;
+  // Invalidate any token(s) already issued to this manager — otherwise a
+  // still-open session (or one they never logged out of) would keep working
+  // right up until they happen to log out, even though their password just
+  // changed out from under them.
+  manager.tokenVersion += 1;
   await manager.save();
 
   res.json({

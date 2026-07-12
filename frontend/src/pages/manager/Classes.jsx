@@ -136,7 +136,7 @@ export default function Classes() {
             value={query}
             onChange={setQuery}
             placeholder="Search by class or teacher..."
-            className="w-64"
+            className="w-full sm:w-64"
           />
         }
       >
