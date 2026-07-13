@@ -626,6 +626,8 @@ export default function Reports() {
               <Button
                 size="sm"
                 variant="teal"
+                disabled={sortedReports.length === 0}
+                title={sortedReports.length === 0 ? "No students in this class" : undefined}
                 onClick={() =>
                   downloadPdf(
                     `${api.defaults.baseURL}/classes/${selectedClassId}/term/${selectedTermId}/report/pdf`,

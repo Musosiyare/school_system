@@ -10,9 +10,13 @@ import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
-import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays } from "lucide-react";
+import { useConfirm } from "../../components/ui/ConfirmProvider";
+import { useNotify } from "../../components/ui/NotifyProvider";
+import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 
 export default function Classes() {
+  const confirm = useConfirm();
+  const notify = useNotify();
   const [classes, setClasses] = useState([]);
   const [years, setYears] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -32,6 +36,8 @@ export default function Classes() {
   const [manageError, setManageError] = useState("");
   const [manageSuccess, setManageSuccess] = useState("");
   const [savingManage, setSavingManage] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [suspending, setSuspending] = useState(false);
   const [query, setQuery] = useState("");
 
   async function loadAll() {
@@ -123,6 +129,57 @@ export default function Classes() {
     }
   }
 
+  async function handleDeleteClass() {
+    const ok = await confirm({
+      title: `Delete ${managing.name}?`,
+      message:
+        "This can't be undone. Only allowed if this class has no students and no marks recorded — otherwise it will be blocked to protect that data.",
+      confirmText: "Delete Class",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setDeleting(true);
+    try {
+      await api.delete(`/classes/${managing.id}`);
+      setManaging(null);
+      await loadAll();
+    } catch (err) {
+      const blocked = err.code === "CLASS_NOT_EMPTY";
+      notify({
+        title: blocked ? "Can't delete this class" : "Delete failed",
+        message: err.message,
+        tone: blocked ? "warning" : "error",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleToggleSuspend() {
+    const willSuspend = !managing.isSuspended;
+    const ok = await confirm({
+      title: willSuspend ? `Suspend ${managing.name}?` : `Unsuspend ${managing.name}?`,
+      message: willSuspend
+        ? "Teachers will no longer see this class anywhere — not in their class picker, marks entry, rosters, or reports. Nothing is deleted, and you can unsuspend it any time."
+        : "This class becomes visible and usable by teachers again.",
+      confirmText: willSuspend ? "Suspend Class" : "Unsuspend Class",
+      tone: willSuspend ? "danger" : "primary",
+    });
+    if (!ok) return;
+
+    setSuspending(true);
+    try {
+      const { data } = await api.patch(`/classes/${managing.id}/suspend`, { suspended: willSuspend });
+      setManaging(data.class);
+      await loadAll();
+    } catch (err) {
+      notify({ title: "Couldn't update this class", message: err.message, tone: "error" });
+    } finally {
+      setSuspending(false);
+    }
+  }
+
   const filteredClasses = classes.filter((c) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -178,7 +235,12 @@ export default function Classes() {
             )}
             {pagedClasses.map((c) => (
               <tr key={c.id}>
-                <Td className="font-medium text-slate-800">{c.name}</Td>
+                <Td className="font-medium text-slate-800">
+                  <div className="flex items-center gap-2">
+                    {c.name}
+                    {c.isSuspended && <Badge tone="warning">Suspended</Badge>}
+                  </div>
+                </Td>
                 <Td className="text-slate-500">{c.AcademicYear?.name || "-"}</Td>
                 <Td>
                   {c.classTeacher ? c.classTeacher.name : <Badge tone="warning">Unassigned</Badge>}
@@ -258,7 +320,12 @@ export default function Classes() {
       <Modal
         open={!!managing}
         onClose={() => setManaging(null)}
-        title={`Manage ${managing?.name || ""}`}
+        title={
+          <span className="flex items-center gap-2">
+            {`Manage ${managing?.name || ""}`}
+            {managing?.isSuspended && <Badge tone="warning">Suspended</Badge>}
+          </span>
+        }
         size="lg"
         footer={
           <>
@@ -332,6 +399,27 @@ export default function Classes() {
 
           <ErrorText>{manageError}</ErrorText>
           <SuccessText>{manageSuccess}</SuccessText>
+
+          <div className="pt-4 border-t border-slate-100">
+            <p className="text-sm font-medium text-slate-700 mb-1">Class Actions</p>
+            <p className="text-xs text-slate-400 mb-3">
+              Suspending hides this class from teachers everywhere without touching any data. Deleting is
+              only allowed if this class has no students and no marks recorded.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant={managing?.isSuspended ? "teal" : "amber"} onClick={handleToggleSuspend} disabled={suspending}>
+                {managing?.isSuspended ? <PlayCircle size={15} /> : <PauseCircle size={15} />}
+                {suspending
+                  ? "Updating..."
+                  : managing?.isSuspended
+                  ? "Unsuspend This Class"
+                  : "Suspend This Class"}
+              </Button>
+              <Button variant="danger" onClick={handleDeleteClass} disabled={deleting}>
+                <Trash2 size={15} /> {deleting ? "Deleting..." : "Delete This Class"}
+              </Button>
+            </div>
+          </div>
         </div>
       </Modal>
 

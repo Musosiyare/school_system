@@ -3,6 +3,8 @@ const {
   createClass,
   listClasses,
   getClass,
+  deleteClass,
+  setClassSuspended,
   setClassModules,
   assignClassTeacher,
   getIncompleteMarks,
@@ -16,6 +18,8 @@ router.use(authenticate, scopeToSchool);
 router.post("/", authorize("manager"), createClass);
 router.get("/", authorize("manager", "teacher"), listClasses);
 router.get("/:id", authorize("manager", "teacher"), getClass);
+router.delete("/:id", authorize("manager"), deleteClass);
+router.patch("/:id/suspend", authorize("manager"), setClassSuspended);
 router.put("/:id/modules", authorize("manager"), setClassModules);
 router.post("/:id/assign-teacher", authorize("manager"), assignClassTeacher);
 

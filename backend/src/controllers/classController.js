@@ -1,4 +1,5 @@
 const {
+  sequelize,
   Class,
   ClassModule,
   Module,
@@ -8,6 +9,7 @@ const {
   Student,
   Term,
   TeacherModuleAssignment,
+  Notification,
 } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
@@ -39,7 +41,13 @@ const listClasses = asyncHandler(async (req, res) => {
     ],
     order: [["name", "ASC"]],
   });
-  res.json({ classes });
+
+  // Teachers should never see a suspended class in any picker — managers
+  // still see everything, including suspended classes, since they're the
+  // ones who manage suspension.
+  const visible = req.user.role === "teacher" ? classes.filter((c) => !c.isSuspended) : classes;
+
+  res.json({ classes: visible });
 });
 
 // GET /api/classes/:id — single class detail (used by the "Manage" modal)
@@ -52,6 +60,63 @@ const getClass = asyncHandler(async (req, res) => {
     ],
   });
   if (!klass) throw ApiError.notFound("Class not found");
+  if (req.user.role === "teacher" && klass.isSuspended) {
+    throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
+  }
+  res.json({ class: klass });
+});
+
+// DELETE /api/classes/:id — only allowed if the class has no students and no
+// marks recorded — i.e. it was created by mistake or never actually used.
+// This protects against silently destroying real academic records. Once
+// confirmed empty, its module list, teacher assignments, and any
+// notifications referencing it are cleaned up in the same transaction so
+// nothing is left dangling.
+const deleteClass = asyncHandler(async (req, res) => {
+  const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  if (!klass) throw ApiError.notFound("Class not found");
+
+  const [studentCount, markCount] = await Promise.all([
+    Student.count({ where: { classId: klass.id } }),
+    Mark.count({ where: { classId: klass.id } }),
+  ]);
+
+  if (studentCount > 0) {
+    throw ApiError.conflict(
+      "This class still has students enrolled and can't be deleted. Move or remove them first.",
+      "CLASS_NOT_EMPTY"
+    );
+  }
+  if (markCount > 0) {
+    throw ApiError.conflict(
+      "This class already has marks recorded and can't be deleted, to protect that academic record.",
+      "CLASS_NOT_EMPTY"
+    );
+  }
+
+  await sequelize.transaction(async (t) => {
+    await ClassModule.destroy({ where: { classId: klass.id }, transaction: t });
+    await TeacherModuleAssignment.destroy({ where: { classId: klass.id }, transaction: t });
+    await Notification.destroy({ where: { classId: klass.id }, transaction: t });
+    await klass.destroy({ transaction: t });
+  });
+
+  res.json({ message: "Class deleted" });
+});
+
+// PATCH /api/classes/:id/suspend — suspend or unsuspend a class. Suspending
+// never touches any data — it only hides the class from teachers (their
+// class picker, marks entry, rosters, reports) until it's unsuspended.
+const setClassSuspended = asyncHandler(async (req, res) => {
+  const { suspended } = req.body;
+  if (typeof suspended !== "boolean") throw ApiError.badRequest("suspended must be true or false");
+
+  const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  if (!klass) throw ApiError.notFound("Class not found");
+
+  klass.isSuspended = suspended;
+  await klass.save();
+
   res.json({ class: klass });
 });
 
@@ -142,6 +207,9 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
   if (req.user.role === "teacher" && klass.classTeacherId !== req.user.id) {
     throw ApiError.forbidden("You are not the class teacher for this class");
   }
+  if (req.user.role === "teacher" && klass.isSuspended) {
+    throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
+  }
 
   const term = await Term.findOne({ where: { id: termId } });
   if (!term) throw ApiError.badRequest("Invalid termId");
@@ -192,6 +260,8 @@ module.exports = {
   createClass,
   listClasses,
   getClass,
+  deleteClass,
+  setClassSuspended,
   setClassModules,
   assignClassTeacher,
   getIncompleteMarks,

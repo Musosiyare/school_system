@@ -60,10 +60,18 @@ const listTeacherAssignments = asyncHandler(async (req, res) => {
     throw ApiError.forbidden("You can only view your own assignments");
   }
 
-  const assignments = await TeacherModuleAssignment.findAll({
+  // A teacher's own class/module picker (used to enter marks, download
+  // templates, etc.) should never surface a suspended class — the
+  // manager-facing assignment list (listAllAssignments below) is untouched,
+  // so old assignments stay visible there for record-keeping.
+  let assignments = await TeacherModuleAssignment.findAll({
     where: { teacherId },
     include: [Module, Class],
   });
+
+  if (req.user.role === "teacher") {
+    assignments = assignments.filter((a) => !a.Class?.isSuspended);
+  }
 
   res.json({ assignments });
 });

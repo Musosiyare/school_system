@@ -50,6 +50,9 @@ async function assertClassAccess(classId, req) {
   if (req.user.role === "teacher" && klass.classTeacherId !== req.user.id) {
     throw ApiError.forbidden("You can only view reports for your own class");
   }
+  if (req.user.role === "teacher" && klass.isSuspended) {
+    throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
+  }
   return klass;
 }
 

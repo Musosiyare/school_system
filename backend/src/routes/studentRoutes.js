@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { createStudent, updateStudent, deleteStudent } = require("../controllers/studentController");
+const { createStudent, updateStudent, deleteStudent, getStudentRosterPdf } = require("../controllers/studentController");
 const { setRemark } = require("../controllers/remarkController");
 const {
   getStudentReport,
@@ -9,6 +9,10 @@ const {
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
 
 router.use(authenticate, scopeToSchool);
+
+// Placed ahead of the "/:studentId" routes below so "roster" is never
+// matched as a student id.
+router.get("/roster/pdf", authorize("manager"), getStudentRosterPdf);
 
 router.post("/", authorize("manager"), createStudent);
 router.put("/:studentId", authorize("manager"), updateStudent);

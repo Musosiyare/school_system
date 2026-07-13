@@ -17,6 +17,7 @@ const assignmentRoutes = require("./src/routes/assignmentRoutes");
 const markRoutes = require("./src/routes/markRoutes");
 const termRoutes = require("./src/routes/termRoutes");
 const notificationRoutes = require("./src/routes/notificationRoutes");
+const statisticsRoutes = require("./src/routes/statisticsRoutes");
 const errorHandler = require("./src/middleware/errorHandler");
 
 const app = express();
@@ -37,6 +38,7 @@ app.use("/api/assignments", assignmentRoutes);
 app.use("/api/marks", markRoutes);
 app.use("/api/terms", termRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/statistics", statisticsRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -22,6 +22,7 @@ import Modules from "./pages/manager/Modules";
 import Teachers from "./pages/manager/Teachers";
 import Students from "./pages/manager/Students";
 import Assignments from "./pages/manager/Assignments";
+import Statistics from "./pages/manager/Statistics";
 import ManagerProfile from "./pages/manager/ManagerProfile";
 
 import MarksEntry from "./pages/teacher/MarksEntry";
@@ -121,6 +122,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["manager"]}>
                   <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/manager/statistics"
+              element={
+                <ProtectedRoute roles={["manager"]}>
+                  <Statistics />
                 </ProtectedRoute>
               }
             />

@@ -14,6 +14,7 @@ import {
   ClipboardList,
   PencilLine,
   FileText,
+  BarChart3,
   BellRing,
   UserCog,
   LogOut,
@@ -46,6 +47,7 @@ const NAV = {
     { to: "/manager/students", label: "Students", icon: GraduationCap },
     { to: "/manager/assignments", label: "Assignments", icon: ClipboardList },
     { to: "/manager/reports", label: "Reports", icon: FileText },
+    { to: "/manager/statistics", label: "Statistics", icon: BarChart3 },
     { to: "/manager/profile", label: "Profile", icon: UserCog },
   ],
   teacher: [
@@ -82,6 +84,11 @@ const PAGE_META = {
     icon: ClipboardList,
   },
   "/manager/reports": { title: "Reports", subtitle: "Class rankings and printable report cards.", icon: FileText },
+  "/manager/statistics": {
+    title: "Statistics",
+    subtitle: "Enrollment, gender split, and top performers at a glance.",
+    icon: BarChart3,
+  },
   "/manager/profile": { title: "Profile", subtitle: "Your account and school settings.", icon: UserCog },
   "/teacher": {
     title: (user) => `Welcome back, ${user.name?.split(" ")[0] || ""}`,

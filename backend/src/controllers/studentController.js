@@ -2,7 +2,7 @@ const { Student, Class, Mark, ReportRemark, School, User } = require("../models"
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const generateStudentId = require("../utils/generateStudentId");
-const { generateStudentListPdf } = require("../services/pdfService");
+const { generateStudentListPdf, generateStudentRosterPdf } = require("../services/pdfService");
 
 // POST /api/students
 const createStudent = asyncHandler(async (req, res) => {
@@ -95,6 +95,9 @@ const deleteStudent = asyncHandler(async (req, res) => {
 const listStudentsByClass = asyncHandler(async (req, res) => {
   const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
   if (!klass) throw ApiError.notFound("Class not found");
+  if (req.user.role === "teacher" && klass.isSuspended) {
+    throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
+  }
 
   const students = await Student.findAll({
     where: { classId: req.params.id },
@@ -149,10 +152,80 @@ const getClassStudentListPdf = asyncHandler(async (req, res) => {
   res.send(pdfBuffer);
 });
 
+// GET /api/students/roster/pdf?classId=&gender=all|M|F — the "Get Student
+// List" button on the manager's Statistics page. Unlike
+// getClassStudentListPdf (a per-class guardian-contact sheet), this covers
+// either one class or the whole school, can be narrowed to boys/girls/all,
+// and deliberately leaves guardian details off the page.
+const getStudentRosterPdf = asyncHandler(async (req, res) => {
+  const { classId, gender } = req.query;
+  const genderFilter = ["M", "F"].includes(gender) ? gender : "all";
+
+  const school = await School.findByPk(req.schoolId);
+
+  const where = { schoolId: req.schoolId, status: "active" };
+  if (genderFilter !== "all") where.sex = genderFilter;
+
+  let className = null;
+  let classTeacherName = null;
+
+  if (classId) {
+    const klass = await Class.findOne({
+      where: { id: classId, schoolId: req.schoolId },
+      include: [{ model: User, as: "classTeacher", attributes: ["name"] }],
+    });
+    if (!klass) throw ApiError.notFound("Class not found");
+    className = klass.name;
+    classTeacherName = klass.classTeacher?.name || null;
+    where.classId = classId;
+  }
+
+  const students = await Student.findAll({
+    where,
+    include: classId ? [] : [Class],
+    order: [["firstName", "ASC"]],
+  });
+
+  const rows = students.map((s) => ({
+    admissionNumber: s.admissionNumber,
+    name: `${s.firstName} ${s.lastName}`,
+    dob: s.dob ? new Date(s.dob).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : null,
+    sex: s.sex === "M" ? "Male" : s.sex === "F" ? "Female" : null,
+    className: classId ? className : s.Class?.name || null,
+  }));
+
+  const genderLabel = genderFilter === "M" ? "Boys Only" : genderFilter === "F" ? "Girls Only" : "All Students";
+
+  const pdfBuffer = await generateStudentRosterPdf(
+    {
+      scope: classId ? "class" : "school",
+      className,
+      classTeacherName,
+      genderLabel,
+      schoolPhone: school.phone,
+      schoolEmail: school.email,
+      schoolAddress: school.address,
+      rows,
+      generatedAt: new Date().toLocaleDateString(),
+    },
+    school.name
+  );
+
+  const scopePart = classId ? className.replace(/\s+/g, "-") : "whole-school";
+  const genderPart = genderFilter === "all" ? "" : `-${genderFilter === "M" ? "boys" : "girls"}`;
+
+  res.set({
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="students-${scopePart}${genderPart}.pdf"`,
+  });
+  res.send(pdfBuffer);
+});
+
 module.exports = {
   createStudent,
   updateStudent,
   deleteStudent,
   listStudentsByClass,
   getClassStudentListPdf,
+  getStudentRosterPdf,
 };

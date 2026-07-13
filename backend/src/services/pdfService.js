@@ -970,4 +970,118 @@ module.exports = {
   generateClassReportPdf,
   generateMarksEvidencePdf,
   generateStudentListPdf,
+  generateStudentRosterPdf,
 };
+
+// Borderless header for the flexible roster PDF (generateStudentRosterPdf) —
+// same conventions as studentListHeader, but the class line becomes
+// "Whole School" for a school-wide export, and a gender-filter line is
+// always shown so it's obvious which subset of students this is.
+function studentRosterHeader(schoolName, scopeLabel, classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
+  const infoRow = (leftText, rightText) => ({
+    columns: [
+      { text: leftText, fontSize: 9.5 },
+      { text: rightText || "", fontSize: 9.5, alignment: "right" },
+    ],
+    margin: [0, 2, 0, 0],
+  });
+
+  return {
+    stack: [
+      { text: schoolName || "School", alignment: "center", fontSize: 16, bold: true, color: BLACK },
+      {
+        text: "STUDENT LIST",
+        alignment: "center",
+        fontSize: 10.5,
+        bold: true,
+        color: "#444444",
+        margin: [0, 3, 0, 10],
+      },
+      infoRow(scopeLabel, `Generated: ${generatedAt}`),
+      infoRow(`Filter: ${genderLabel}`, schoolPhone ? `Phone: ${schoolPhone}` : ""),
+      ...(classTeacherName ? [infoRow(`Class Teacher: ${classTeacherName}`, "")] : []),
+      infoRow(schoolEmail ? `Email: ${schoolEmail}` : "", schoolAddress ? `Location: ${schoolAddress}` : ""),
+    ],
+    margin: [0, 0, 0, 14],
+  };
+}
+
+// GET .../students/roster/pdf — a flexible, printable student list: either a
+// single class or the whole school, optionally narrowed to boys only, girls
+// only, or everyone. Deliberately excludes guardian name/phone (unlike
+// generateStudentListPdf's single-class roster, this is meant as a quick
+// headcount/name list, not a guardian-contact sheet). When it covers the
+// whole school, a Class column is added so each row still says where the
+// student belongs.
+function generateStudentRosterPdf(data, schoolName = "School Name") {
+  const { scope, className, classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, rows, generatedAt } = data;
+  const isSchoolWide = scope === "school";
+
+  const maleCount = rows.filter((r) => r.sex === "Male").length;
+  const femaleCount = rows.filter((r) => r.sex === "Female").length;
+
+  const headerCell = (text, alignment) => ({ text, bold: true, fontSize: 9, alignment: alignment || "left" });
+
+  const columns = ["#", "Student ID", "Name", "DOB", "Sex", ...(isSchoolWide ? ["Class"] : [])];
+  const widths = [24, "auto", "*", "auto", "auto", ...(isSchoolWide ? ["auto"] : [])];
+
+  const tableBody = [
+    columns.map((c, idx) => headerCell(c, idx === 0 || c === "DOB" || c === "Sex" ? "center" : "left")),
+    ...rows.map((r, idx) => [
+      { text: String(idx + 1), fontSize: 9, alignment: "center" },
+      { text: r.admissionNumber || "-", fontSize: 9 },
+      { text: r.name, fontSize: 9, bold: true },
+      { text: r.dob || "-", fontSize: 9, alignment: "center" },
+      { text: r.sex || "-", fontSize: 9, alignment: "center" },
+      ...(isSchoolWide ? [{ text: r.className || "-", fontSize: 9 }] : []),
+    ]),
+  ];
+
+  if (rows.length === 0) {
+    tableBody.push([
+      { text: "No students match this selection.", colSpan: columns.length, alignment: "center", fontSize: 9, italics: true },
+      ...Array(columns.length - 1).fill({}),
+    ]);
+  }
+
+  const studentTable = {
+    table: {
+      headerRows: 1,
+      widths,
+      dontBreakRows: true,
+      body: tableBody,
+    },
+    layout: thinGridLayout,
+  };
+
+  const scopeLabel = isSchoolWide ? "Whole School — All Classes" : `Class: ${className || "-"}`;
+
+  const docDefinition = {
+    pageMargins: [36, 36, 36, 50],
+    content: [
+      thinOuterBorder([
+        studentRosterHeader(schoolName, scopeLabel, isSchoolWide ? null : classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, generatedAt),
+        studentListSummary(rows.length, maleCount, femaleCount),
+        studentTable,
+        studentListFooter(schoolName),
+      ]),
+    ],
+    footer: (currentPage, pageCount) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: "center",
+      fontSize: 8,
+      color: "#6b7280",
+      margin: [0, 8, 0, 0],
+    }),
+    defaultStyle: { font: "Roboto", fontSize: 10, color: BLACK },
+  };
+
+  const pdfDoc = printer.createPdfKitDocument(docDefinition);
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    pdfDoc.on("data", (chunk) => chunks.push(chunk));
+    pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
+    pdfDoc.on("error", reject);
+    pdfDoc.end();
+  });
+}

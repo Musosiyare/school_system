@@ -12,6 +12,15 @@ async function assertTeacherIsAssigned(userId, role, moduleId, classId) {
   if (!assignment) {
     throw ApiError.forbidden("You are not assigned to teach this module for this class");
   }
+
+  // Defense in depth: even if an old assignment row was never cleaned up,
+  // a teacher should never be able to read or write marks for a suspended
+  // class. The class picker already hides suspended classes, so this only
+  // matters for someone calling the API directly.
+  const klass = await Class.findByPk(classId);
+  if (klass?.isSuspended) {
+    throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
+  }
 }
 
 // Shared by submitMarks (JSON entry) and importMarksTemplate (spreadsheet
