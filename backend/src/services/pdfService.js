@@ -586,9 +586,11 @@ const GREEN = "#1f7a4d";
 const RED = "#b3403a";
 const BLUE = "#1d4ed8"; // not recorded — matches the frontend's N/A color
 const TEAL = "#0d9488"; // matches the frontend's teacher accent color
+const ROSE = "#be185d";
 const GREEN_BG = "#e7f6ee";
 const RED_BG = "#fbebea";
 const BLUE_BG = "#eaf1fd";
+const ROSE_BG = "#fce7f3";
 const ROW_ALT_BG = "#f7f8fa";
 
 const evidenceStyles = {
@@ -599,6 +601,7 @@ const evidenceStyles = {
   tableCell: { fontSize: 10, color: "#1f2937" },
   statLabel: { fontSize: 8, color: "#6b7280", bold: true },
   statValue: { fontSize: 15, bold: true, color: "#111827" },
+  footerText: { fontSize: 8, color: "#9ca3af" },
 };
 
 const evidenceTableLayout = {
@@ -773,85 +776,183 @@ function generateMarksEvidencePdf(data, schoolName = "School Name") {
   });
 }
 
-// Teal banner for the student list report, mirroring evidenceHeaderBanner's
-// style so all "roster/evidence"-style exports look like one family.
-function studentListHeaderBanner(schoolName, className, generatedAt) {
+// Thin single-line border variants, used only by the student list report —
+// kept separate from blackGridLayout/outerBorder (used by the report card)
+// so this change can't affect any other PDF.
+const THIN = 0.5;
+
+const thinGridLayout = {
+  hLineWidth: () => THIN,
+  vLineWidth: () => THIN,
+  hLineColor: () => BLACK,
+  vLineColor: () => BLACK,
+  paddingLeft: () => 8,
+  paddingRight: () => 8,
+  paddingTop: () => 6,
+  paddingBottom: () => 6,
+};
+
+function thinOuterBorder(content) {
   return {
     table: {
       widths: ["*"],
+      body: [[{ stack: content }]],
+    },
+    layout: {
+      hLineWidth: () => THIN,
+      vLineWidth: () => THIN,
+      hLineColor: () => BLACK,
+      vLineColor: () => BLACK,
+      paddingLeft: () => 14,
+      paddingRight: () => 14,
+      paddingTop: () => 14,
+      paddingBottom: () => 14,
+    },
+  };
+}
+
+// Plain, borderless header for the student list report — school name,
+// report title, then class/teacher/contact details. No border here: the
+// only borders on this page are the single thin outer border around
+// everything, plus the student table's own thin grid further down.
+function studentListHeader(schoolName, className, classTeacherName, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
+  const infoRow = (leftText, rightText) => ({
+    columns: [
+      { text: leftText, fontSize: 9.5 },
+      { text: rightText || "", fontSize: 9.5, alignment: "right" },
+    ],
+    margin: [0, 2, 0, 0],
+  });
+
+  return {
+    stack: [
+      { text: schoolName || "School", alignment: "center", fontSize: 16, bold: true, color: BLACK },
+      {
+        text: "CLASS STUDENT LIST",
+        alignment: "center",
+        fontSize: 10.5,
+        bold: true,
+        color: "#444444",
+        margin: [0, 3, 0, 10],
+      },
+      infoRow(`Class: ${className || "-"}`, `Generated: ${generatedAt}`),
+      infoRow(`Class Teacher: ${classTeacherName || "-"}`, schoolPhone ? `Phone: ${schoolPhone}` : ""),
+      infoRow(schoolEmail ? `Email: ${schoolEmail}` : "", schoolAddress ? `Location: ${schoolAddress}` : ""),
+    ],
+    margin: [0, 0, 0, 14],
+  };
+}
+
+// Plain, borderless summary line (Total / Male / Female) sitting between
+// the header and the bordered student table.
+function studentListSummary(total, maleCount, femaleCount) {
+  return {
+    columns: [
+      { text: `Total Students: ${total}`, fontSize: 9.5, bold: true },
+      { text: `Male: ${maleCount}`, fontSize: 9.5, alignment: "center" },
+      { text: `Female: ${femaleCount}`, fontSize: 9.5, alignment: "right" },
+    ],
+    margin: [0, 0, 0, 12],
+  };
+}
+
+// Borderless footer, drawn as the last block inside the outer border —
+// same convention as cardFooter() on the report card.
+function studentListFooter(schoolName) {
+  const generatedOn = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  return {
+    table: {
+      widths: ["*", "*"],
       body: [
         [
-          {
-            fillColor: TEAL,
-            border: [false, false, false, false],
-            stack: [
-              { text: schoolName || "School", style: "reportTitle" },
-              { text: "CLASS STUDENT LIST", style: "reportSubtitle" },
-              {
-                text: `${className}  ·  Generated: ${generatedAt}`,
-                style: "reportSubtitle",
-                margin: [0, 1, 0, 0],
-              },
-            ],
-          },
+          { text: `Generated: ${generatedOn}`, fontSize: 7.5, color: "#6b7280" },
+          { text: schoolName || "", fontSize: 7.5, color: "#6b7280", alignment: "right" },
         ],
       ],
     },
-    layout: { paddingTop: () => 14, paddingBottom: () => 14, paddingLeft: () => 16, paddingRight: () => 16 },
-    margin: [0, 0, 0, 16],
+    layout: {
+      hLineWidth: (i) => (i === 0 ? THIN : 0),
+      vLineWidth: () => 0,
+      hLineColor: () => BLACK,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 6,
+      paddingBottom: () => 0,
+    },
+    margin: [0, 14, 0, 0],
   };
 }
 
 // GET .../students/pdf — a manager's printable roster for a single class:
 // every enrolled student with DOB, sex and guardian contact info, so it can
-// double as a call sheet or a guardian-contact list.
+// double as a call sheet or a guardian-contact list. Kept strictly
+// black-and-white: a single thin black outer border frames the whole page,
+// the header/summary/footer sections are plain (no borders), and only the
+// student list itself is a thin-bordered black-grid table.
 function generateStudentListPdf(data, schoolName = "School Name") {
-  const { className, rows, generatedAt } = data;
+  const { className, classTeacherName, schoolPhone, schoolEmail, schoolAddress, rows, generatedAt } = data;
+
+  const maleCount = rows.filter((r) => r.sex === "Male").length;
+  const femaleCount = rows.filter((r) => r.sex === "Female").length;
+
+  const headerCell = (text, alignment) => ({ text, bold: true, fontSize: 9, alignment: alignment || "left" });
 
   const tableBody = [
     [
-      { text: "#", style: "tableHeaderCell" },
-      { text: "Student ID", style: "tableHeaderCell" },
-      { text: "Name", style: "tableHeaderCell" },
-      { text: "DOB", style: "tableHeaderCell" },
-      { text: "Sex", style: "tableHeaderCell", alignment: "center" },
-      { text: "Guardian", style: "tableHeaderCell" },
-      { text: "Guardian Phone", style: "tableHeaderCell", border: [false, false, false, false] },
+      headerCell("#", "center"),
+      headerCell("Student ID"),
+      headerCell("Name"),
+      headerCell("DOB", "center"),
+      headerCell("Sex", "center"),
+      headerCell("Guardian"),
+      headerCell("Guardian Phone"),
     ],
-    ...rows.map((r, idx) => {
-      const fillColor = idx % 2 === 1 ? ROW_ALT_BG : undefined;
-      return [
-        { text: String(idx + 1), style: "tableCell", fillColor },
-        { text: r.admissionNumber || "-", style: "tableCell", fillColor },
-        { text: r.name, style: "tableCell", bold: true, fillColor },
-        { text: r.dob || "-", style: "tableCell", fillColor },
-        { text: r.sex || "-", style: "tableCell", alignment: "center", fillColor },
-        { text: r.guardianName || "-", style: "tableCell", fillColor },
-        { text: r.guardianPhone || "-", style: "tableCell", fillColor },
-      ];
-    }),
+    ...rows.map((r, idx) => [
+      { text: String(idx + 1), fontSize: 9, alignment: "center" },
+      { text: r.admissionNumber || "-", fontSize: 9 },
+      { text: r.name, fontSize: 9, bold: true },
+      { text: r.dob || "-", fontSize: 9, alignment: "center" },
+      { text: r.sex || "-", fontSize: 9, alignment: "center" },
+      { text: r.guardianName || "-", fontSize: 9 },
+      { text: r.guardianPhone || "-", fontSize: 9 },
+    ]),
   ];
 
-  tableBody[0].forEach((cell) => {
-    cell.fillColor = TEAL;
-  });
+  if (rows.length === 0) {
+    tableBody.push([
+      { text: "No students enrolled in this class yet.", colSpan: 7, alignment: "center", fontSize: 9, italics: true },
+      {}, {}, {}, {}, {}, {},
+    ]);
+  }
+
+  const studentTable = {
+    table: {
+      headerRows: 1,
+      widths: [24, "auto", "*", "auto", "auto", "*", "auto"],
+      dontBreakRows: true,
+      body: tableBody,
+    },
+    layout: thinGridLayout,
+  };
 
   const docDefinition = {
-    pageMargins: [36, 0, 36, 40],
+    pageMargins: [36, 36, 36, 50],
     content: [
-      studentListHeaderBanner(schoolName, className, generatedAt),
-      {
-        text: `Total Students: ${rows.length}`,
-        style: "studentMeta",
-        margin: [0, 0, 0, 8],
-      },
-      {
-        table: { headerRows: 1, widths: ["auto", "auto", "*", "auto", "auto", "*", "auto"], body: tableBody },
-        layout: evidenceTableLayout,
-      },
+      thinOuterBorder([
+        studentListHeader(schoolName, className, classTeacherName, schoolPhone, schoolEmail, schoolAddress, generatedAt),
+        studentListSummary(rows.length, maleCount, femaleCount),
+        studentTable,
+        studentListFooter(schoolName),
+      ]),
     ],
-    styles: evidenceStyles,
-    defaultStyle: { font: "Roboto", fontSize: 10 },
+    footer: (currentPage, pageCount) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: "center",
+      fontSize: 8,
+      color: "#6b7280",
+      margin: [0, 8, 0, 0],
+    }),
+    defaultStyle: { font: "Roboto", fontSize: 10, color: BLACK },
   };
 
   const pdfDoc = printer.createPdfKitDocument(docDefinition);

@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { Field, Input } from "../components/ui/FormField";
+import { Field, Input, IconInput } from "../components/ui/FormField";
 import { ErrorText } from "../components/ui/Alerts";
 import Button from "../components/ui/Button";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Lock } from "lucide-react";
 
 export default function ChangePassword() {
   const { user, updateUser } = useAuth();
@@ -51,7 +51,8 @@ export default function ChangePassword() {
 
         <form noValidate onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
           <Field label="New Password (min 8 characters)">
-            <Input
+            <IconInput
+              icon={Lock}
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -61,7 +62,7 @@ export default function ChangePassword() {
             />
           </Field>
           <Field label="Confirm Password">
-            <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+            <IconInput icon={Lock} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </Field>
           <ErrorText>{error}</ErrorText>
           <Button type="submit" disabled={submitting} className="w-full">

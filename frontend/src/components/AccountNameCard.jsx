@@ -3,9 +3,9 @@ import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Card from "./ui/Card";
 import Button from "./ui/Button";
-import { Field, Input } from "./ui/FormField";
+import { Field, Input, IconInput } from "./ui/FormField";
 import { ErrorText, SuccessText } from "./ui/Alerts";
-import { UserCircle } from "lucide-react";
+import { UserCircle, Mail } from "lucide-react";
 
 // Self-service "your name" (and, for superuser, "your email") editor, used
 // from the Profile pages. Separate from School Information (manager-only,
@@ -68,11 +68,11 @@ export default function AccountNameCard({ className = "", allowEmailEdit = false
     >
       <form noValidate onSubmit={handleSubmit} className="space-y-4 max-w-sm">
         <Field label="Your Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
+          <IconInput icon={UserCircle} value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
         {allowEmailEdit && (
           <Field label="Email">
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <IconInput icon={Mail} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </Field>
         )}
         <ErrorText>{error}</ErrorText>

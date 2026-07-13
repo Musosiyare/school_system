@@ -3,11 +3,13 @@ import api from "../../api/client";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
-import { Field, Input } from "../../components/ui/FormField";
+import Pagination from "../../components/ui/Pagination";
+import { usePagination } from "../../hooks/usePagination";
+import { Field, Input, IconInput, IconSelect } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
-import { Pencil, Trash2, Plus, BookOpen, Layers, ChevronDown, School2 } from "lucide-react";
+import { Pencil, Trash2, Plus, BookOpen, Layers, ChevronDown, School2, Hash, Gauge, ListFilter } from "lucide-react";
 
 const emptyForm = { moduleCode: "", moduleTitle: "", moduleWeight: 100, moduleType: "general" };
 
@@ -34,6 +36,73 @@ function previewPassingLine(moduleType, moduleWeight) {
   const pct = moduleType === "specific" ? 0.7 : 0.5;
   const weight = Number(moduleWeight) || 0;
   return +(weight * pct).toFixed(2);
+}
+
+function ModuleGroupPanel({ group, isExpanded, onToggle, openEdit, handleDelete }) {
+  const { pageItems, page, setPage, totalPages, total, pageSize } = usePagination(group.modules, 8);
+
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 hover:bg-slate-100 transition text-left"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="h-8 w-8 shrink-0 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center ring-1 ring-brand-100">
+            <School2 size={16} />
+          </div>
+          <span className="font-medium text-slate-800 truncate">{group.name}</span>
+        </div>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isExpanded && (
+        <div>
+          <div className="divide-y divide-slate-100">
+            {group.modules.length === 0 && (
+              <div className="px-4 py-4 text-sm text-slate-400">No modules here yet.</div>
+            )}
+            {pageItems.map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap text-sm min-w-0">
+                  <span className="font-mono text-xs text-slate-500">{m.moduleCode}</span>
+                  <span className="font-medium text-slate-700">{m.moduleTitle}</span>
+                  <span
+                    className={`text-[11px] font-medium px-2 py-0.5 rounded-full ring-1 ${
+                      MODULE_TYPE_BADGE[m.moduleType] || MODULE_TYPE_BADGE.general
+                    }`}
+                  >
+                    {moduleTypeLabel(m.moduleType)}
+                  </span>
+                  <span className="text-slate-300">·</span>
+                  <span className="tabular-nums text-slate-500 text-xs">Weight {m.moduleWeight}</span>
+                  <span className="text-slate-300">·</span>
+                  <span className="tabular-nums text-slate-500 text-xs">Pass {m.passingLine}</span>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button size="sm" variant="secondary" onClick={() => openEdit(m)}>
+                    <Pencil size={14} />
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => handleDelete(m)}>
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {group.modules.length > 0 && (
+            <div className="px-4">
+              <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={total} pageSize={pageSize} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Modules() {
@@ -228,13 +297,26 @@ export default function Modules() {
   const moduleFormFields = (values, onChange) => (
     <div className="grid grid-cols-2 gap-4">
       <Field label="Module Code">
-        <Input value={values.moduleCode} onChange={(e) => onChange("moduleCode", e.target.value)} required />
+        <IconInput
+          icon={Hash}
+          value={values.moduleCode}
+          onChange={(e) => onChange("moduleCode", e.target.value)}
+          placeholder="e.g. MATH101"
+          required
+        />
       </Field>
       <Field label="Module Title">
-        <Input value={values.moduleTitle} onChange={(e) => onChange("moduleTitle", e.target.value)} required />
+        <IconInput
+          icon={BookOpen}
+          value={values.moduleTitle}
+          onChange={(e) => onChange("moduleTitle", e.target.value)}
+          placeholder="e.g. Mathematics"
+          required
+        />
       </Field>
       <Field label="Module Weight (also the max score)">
-        <Input
+        <IconInput
+          icon={Gauge}
           type="number"
           min="1"
           step="1"
@@ -244,10 +326,10 @@ export default function Modules() {
         />
       </Field>
       <Field label="Module Type">
-        <select
+        <IconSelect
+          icon={ListFilter}
           value={values.moduleType}
           onChange={(e) => onChange("moduleType", e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           required
         >
           {MODULE_TYPE_OPTIONS.map((opt) => (
@@ -255,10 +337,11 @@ export default function Modules() {
               {opt.label}
             </option>
           ))}
-        </select>
+        </IconSelect>
       </Field>
-      <Field label="Passing Line (auto)">
-        <div className="flex items-center h-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 tabular-nums">
+      <Field label="Passing Line (auto)" className="col-span-2">
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 tabular-nums">
+          <Gauge size={16} className="text-slate-400" />
           {previewPassingLine(values.moduleType, values.moduleWeight)} / {values.moduleWeight || 0}
         </div>
       </Field>
@@ -317,68 +400,16 @@ export default function Modules() {
         )}
 
         <div className="space-y-3 mt-3">
-          {classGroups.map((group) => {
-            const isExpanded = !!expandedGroups[group.key];
-            return (
-              <div key={group.key} className="rounded-xl border border-slate-200 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.key)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 hover:bg-slate-100 transition text-left"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center ring-1 ring-brand-100">
-                      <School2 size={16} />
-                    </div>
-                    <span className="font-medium text-slate-800 truncate">{group.name}</span>
-                  </div>
-                  <ChevronDown
-                    size={16}
-                    className={`shrink-0 text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                  />
-                </button>
-
-                {isExpanded && (
-                  <div className="divide-y divide-slate-100">
-                    {group.modules.length === 0 && (
-                      <div className="px-4 py-4 text-sm text-slate-400">No modules here yet.</div>
-                    )}
-                    {group.modules.map((m) => (
-                      <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5 flex-wrap">
-                        <div className="flex items-center gap-2 flex-wrap text-sm min-w-0">
-                          <span className="font-mono text-xs text-slate-500">{m.moduleCode}</span>
-                          <span className="font-medium text-slate-700">{m.moduleTitle}</span>
-                          <span
-                            className={`text-[11px] font-medium px-2 py-0.5 rounded-full ring-1 ${
-                              MODULE_TYPE_BADGE[m.moduleType] || MODULE_TYPE_BADGE.general
-                            }`}
-                          >
-                            {moduleTypeLabel(m.moduleType)}
-                          </span>
-                          <span className="text-slate-300">·</span>
-                          <span className="tabular-nums text-slate-500 text-xs">
-                            Weight {m.moduleWeight}
-                          </span>
-                          <span className="text-slate-300">·</span>
-                          <span className="tabular-nums text-slate-500 text-xs">
-                            Pass {m.passingLine}
-                          </span>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <Button size="sm" variant="secondary" onClick={() => openEdit(m)}>
-                            <Pencil size={14} />
-                          </Button>
-                          <Button size="sm" variant="danger" onClick={() => handleDelete(m)}>
-                            <Trash2 size={14} />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {classGroups.map((group) => (
+            <ModuleGroupPanel
+              key={group.key}
+              group={group}
+              isExpanded={!!expandedGroups[group.key]}
+              onToggle={() => toggleGroup(group.key)}
+              openEdit={openEdit}
+              handleDelete={handleDelete}
+            />
+          ))}
         </div>
       </Card>
 
@@ -403,7 +434,7 @@ export default function Modules() {
           {moduleFormFields(form, updateField)}
 
           <div>
-            <p className="text-sm font-medium text-slate-700 mb-2">Add to classes (optional)</p>
+            <p className="text-sm font-medium text-slate-700 mb-2">Add to classes</p>
             {classes.length === 0 ? (
               <p className="text-sm text-slate-400">No classes yet — create one on the Classes page first.</p>
             ) : (

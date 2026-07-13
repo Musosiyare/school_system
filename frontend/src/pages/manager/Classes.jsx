@@ -4,11 +4,13 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
-import { Field, Input, Select } from "../../components/ui/FormField";
+import Pagination from "../../components/ui/Pagination";
+import { usePagination } from "../../hooks/usePagination";
+import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
-import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2 } from "lucide-react";
+import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays } from "lucide-react";
 
 export default function Classes() {
   const [classes, setClasses] = useState([]);
@@ -26,6 +28,7 @@ export default function Classes() {
   const [managing, setManaging] = useState(null); // class being managed, or null
   const [selectedModuleIds, setSelectedModuleIds] = useState([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const [initialTeacherId, setInitialTeacherId] = useState("");
   const [manageError, setManageError] = useState("");
   const [manageSuccess, setManageSuccess] = useState("");
   const [savingManage, setSavingManage] = useState(false);
@@ -75,7 +78,9 @@ export default function Classes() {
   function openManage(klass) {
     setManaging(klass);
     setSelectedModuleIds((klass.ClassModules || []).map((cm) => cm.moduleId));
-    setSelectedTeacherId(klass.classTeacher?.id ? String(klass.classTeacher.id) : "");
+    const teacherId = klass.classTeacher?.id ? String(klass.classTeacher.id) : "";
+    setSelectedTeacherId(teacherId);
+    setInitialTeacherId(teacherId);
     setManageError("");
     setManageSuccess("");
   }
@@ -97,13 +102,19 @@ export default function Classes() {
   async function handleSaveManage() {
     setManageError("");
     setManageSuccess("");
+
+    if (selectedTeacherId === initialTeacherId) {
+      setManageSuccess("No changes to save.");
+      return;
+    }
+
     setSavingManage(true);
     try {
-      await api.put(`/classes/${managing.id}/modules`, { moduleIds: selectedModuleIds });
       await api.post(`/classes/${managing.id}/assign-teacher`, {
         teacherId: selectedTeacherId ? Number(selectedTeacherId) : null,
       });
       await loadAll();
+      setInitialTeacherId(selectedTeacherId);
       setManageSuccess("Saved.");
     } catch (err) {
       setManageError(err.message);
@@ -119,6 +130,9 @@ export default function Classes() {
       .filter(Boolean)
       .some((field) => field.toLowerCase().includes(q));
   });
+
+  const { pageItems: pagedClasses, page, setPage, totalPages, total, pageSize } =
+    usePagination(filteredClasses, 8);
 
   return (
     <div>
@@ -162,7 +176,7 @@ export default function Classes() {
             {classes.length > 0 && filteredClasses.length === 0 && (
               <EmptyRow colSpan={5}>No classes match "{query}".</EmptyRow>
             )}
-            {filteredClasses.map((c) => (
+            {pagedClasses.map((c) => (
               <tr key={c.id}>
                 <Td className="font-medium text-slate-800">{c.name}</Td>
                 <Td className="text-slate-500">{c.AcademicYear?.name || "-"}</Td>
@@ -198,6 +212,7 @@ export default function Classes() {
             ))}
           </tbody>
         </Table>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={total} pageSize={pageSize} />
       </Card>
 
       {/* Create modal */}
@@ -218,17 +233,17 @@ export default function Classes() {
       >
         <form noValidate onSubmit={handleCreateClass} className="space-y-4">
           <Field label="Class Name (e.g. S2A)">
-            <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+            <IconInput icon={Layers} value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </Field>
           <Field label="Academic Year">
-            <Select value={academicYearId} onChange={(e) => setAcademicYearId(e.target.value)} required>
+            <IconSelect icon={CalendarDays} value={academicYearId} onChange={(e) => setAcademicYearId(e.target.value)} required>
               <option value="">Select year</option>
               {years.map((y) => (
                 <option key={y.id} value={y.id}>
                   {y.name}
                 </option>
               ))}
-            </Select>
+            </IconSelect>
           </Field>
           {years.length === 0 && (
             <p className="text-xs text-amber-600">
@@ -262,14 +277,14 @@ export default function Classes() {
             <p className="text-xs text-slate-400 mb-2">
               Manages this class's reports. Doesn't have to teach here themselves.
             </p>
-            <Select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)}>
+            <IconSelect icon={UserCircle2} value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)}>
               <option value="">Unassigned</option>
               {teachers.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
                 </option>
               ))}
-            </Select>
+            </IconSelect>
           </div>
 
           <div>
@@ -289,13 +304,13 @@ export default function Classes() {
                   return (
                     <label
                       key={m.id}
-                      className="flex items-center gap-2 text-sm text-slate-700 rounded-md px-2 py-1.5 hover:bg-slate-50 cursor-pointer"
+                      className="flex items-center gap-2 text-sm text-slate-700 rounded-md px-2 py-1.5 cursor-default"
                     >
                       <input
                         type="checkbox"
                         checked={selectedModuleIds.includes(m.id)}
-                        onChange={() => toggleModule(m.id)}
-                        className="rounded border-slate-300 text-brand-500 focus:ring-brand-400"
+                        disabled
+                        className="rounded border-slate-300 text-brand-500 focus:ring-brand-400 disabled:opacity-70 cursor-not-allowed"
                       />
                       <span className="flex-1 truncate">
                         <span>
@@ -311,7 +326,7 @@ export default function Classes() {
               </div>
             )}
             <p className="text-xs text-slate-400 mt-2">
-              Removing a module is blocked if it already has marks recorded.
+              To remove a module from this class, edit it from the Modules page.
             </p>
           </div>
 

@@ -8,7 +8,7 @@ import { Field, Select, Input } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award } from "lucide-react";
+import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload } from "lucide-react";
 
 export default function MarksEntry() {
   const { user } = useAuth();
@@ -38,6 +38,18 @@ export default function MarksEntry() {
   const [saving, setSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState("all"); // "all" | "recorded" | "pending" | "pass" | "fail"
   const tableRef = useRef(null);
+  const templateFileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importWarnings, setImportWarnings] = useState([]);
+
+  // Success messages ("Saved...", "Imported...") are transient confirmations,
+  // not something that needs to stay on screen — clear it automatically a
+  // couple seconds after it appears.
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(""), 2000);
+    return () => clearTimeout(timer);
+  }, [success]);
 
   useEffect(() => {
     (async () => {
@@ -255,6 +267,82 @@ export default function MarksEntry() {
       });
   }
 
+  // Downloads a spreadsheet pre-filled with the class roster (and any
+  // scores already recorded) so a teacher can fill it in offline and bring
+  // it back with importTemplateFile below.
+  function downloadTemplate() {
+    const token = localStorage.getItem("token");
+    const params = new URLSearchParams({
+      classId: currentAssignment.classId,
+      moduleId: currentAssignment.moduleId,
+      termId: selectedTermId,
+    });
+    fetch(`${api.defaults.baseURL}/marks/template?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `marks-template-${currentAssignment.Class?.name}-${currentAssignment.Module?.moduleTitle}-${currentTerm?.name}.xlsx`;
+        link.click();
+      });
+  }
+
+  function triggerTemplateUpload() {
+    setError("");
+    setSuccess("");
+    setImportWarnings([]);
+    templateFileInputRef.current?.click();
+  }
+
+  // Handles the file picked from triggerTemplateUpload: uploads it, then
+  // reflects whatever the server actually saved back into the on-screen
+  // table exactly as if those scores had been typed in by hand.
+  async function importTemplateFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file next time
+    if (!file) return;
+    if (isTermLocked) {
+      setError("This term is locked — the school manager has closed it for editing.");
+      return;
+    }
+
+    const ok = await confirm({
+      title: "Import marks from this file?",
+      message: `This will save the scores in "${file.name}" for ${currentAssignment.Module?.moduleTitle} — ${currentAssignment.Class?.name}, ${currentTerm?.name}, overwriting any existing marks for the students listed.`,
+      confirmText: "Import",
+    });
+    if (!ok) return;
+
+    setError("");
+    setSuccess("");
+    setImportWarnings([]);
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("classId", currentAssignment.classId);
+      formData.append("moduleId", currentAssignment.moduleId);
+      formData.append("termId", selectedTermId);
+
+      const { data } = await api.post("/marks/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const byStudent = Object.fromEntries(data.marks.map((m) => [m.studentId, String(m.score)]));
+      setSavedScores((prev) => ({ ...prev, ...byStudent }));
+      setScores((prev) => ({ ...prev, ...byStudent }));
+      setEditMode(false);
+      setSuccess(`Imported ${data.imported} score(s) from the file.`);
+      if (data.warnings?.length) setImportWarnings(data.warnings);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div>
       <Card>
@@ -325,18 +413,64 @@ export default function MarksEntry() {
           title={`Marks — ${currentAssignment.Module?.moduleTitle} (${currentAssignment.Class?.name})`}
           subtitle={`Module weight / max score: ${maxScore}`}
           actions={
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" variant="secondary" onClick={downloadEvidencePdf}>
-                <Download size={14} /> Download Evidence PDF
+            <div className="grid grid-cols-2 gap-2 w-full lg:flex lg:w-auto lg:flex-wrap lg:items-center">
+              <Button
+                size="sm"
+                variant="teal"
+                onClick={downloadTemplate}
+                className="w-full lg:w-auto"
+              >
+                <FileSpreadsheet size={14} />
+                <span className="hidden lg:inline">Download </span>Template
+              </Button>
+              {!isTermLocked && (
+                <>
+                  <input
+                    ref={templateFileInputRef}
+                    type="file"
+                    accept=".xlsx"
+                    className="hidden"
+                    onChange={importTemplateFile}
+                  />
+                  {/* Same protection as the marks table itself: once marks are
+                      already saved, uploading a template is disabled until
+                      the teacher explicitly clicks "Edit Marks" — otherwise a
+                      file could silently overwrite recorded scores. */}
+                  <Button
+                    size="sm"
+                    variant="violet"
+                    onClick={triggerTemplateUpload}
+                    disabled={fieldsDisabled || importing}
+                    title={
+                      hasSavedMarks && !editMode
+                        ? 'Marks are already recorded. Click "Edit Marks" to upload a new file.'
+                        : undefined
+                    }
+                    className="w-full lg:w-auto"
+                  >
+                    <Upload size={14} />
+                    <span className="hidden lg:inline">{importing ? "Importing..." : "Upload Filled Template"}</span>
+                    <span className="lg:hidden">{importing ? "Importing..." : "Upload"}</span>
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="teal"
+                onClick={downloadEvidencePdf}
+                className="w-full lg:w-auto"
+              >
+                <Download size={14} />
+                <span className="hidden lg:inline">Download </span>Evidence PDF
               </Button>
               {!isTermLocked &&
                 hasSavedMarks &&
                 (editMode ? (
-                  <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                  <Button size="sm" variant="ghost" onClick={cancelEdit} className="w-full lg:w-auto">
                     <X size={14} /> Cancel
                   </Button>
                 ) : (
-                  <Button size="sm" variant="secondary" onClick={startEdit}>
+                  <Button size="sm" variant="amber" onClick={startEdit} className="w-full lg:w-auto">
                     <Pencil size={14} /> Edit Marks
                   </Button>
                 ))}
@@ -350,6 +484,16 @@ export default function MarksEntry() {
                 This term is locked. You can still see the class list below, but scores can't be
                 entered or changed until the school manager reopens it.
               </span>
+            </div>
+          )}
+          {importWarnings.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+              <p className="font-medium mb-1">Some rows in the uploaded file were skipped:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {importWarnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
             </div>
           )}
           {!isTermLocked && hasSavedMarks && !editMode && (

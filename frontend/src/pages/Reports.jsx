@@ -625,7 +625,7 @@ export default function Reports() {
               )}
               <Button
                 size="sm"
-                variant="secondary"
+                variant="teal"
                 onClick={() =>
                   downloadPdf(
                     `${api.defaults.baseURL}/classes/${selectedClassId}/term/${selectedTermId}/report/pdf`,
@@ -699,7 +699,7 @@ export default function Reports() {
                         </Button>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="teal"
                           onClick={() =>
                             downloadPdf(
                               `${api.defaults.baseURL}/students/${r.student.id}/term/${selectedTermId}/report/pdf`,
@@ -736,6 +736,7 @@ export default function Reports() {
             )}
             {viewingStudent && studentReport && (
               <Button
+                variant="teal"
                 onClick={() =>
                   downloadPdf(
                     `${api.defaults.baseURL}/students/${viewingStudent.id}/term/${selectedTermId}/report/pdf`,

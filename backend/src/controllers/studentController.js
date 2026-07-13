@@ -1,4 +1,4 @@
-const { Student, Class, Mark, ReportRemark, School } = require("../models");
+const { Student, Class, Mark, ReportRemark, School, User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const generateStudentId = require("../utils/generateStudentId");
@@ -107,7 +107,10 @@ const listStudentsByClass = asyncHandler(async (req, res) => {
 // GET /api/classes/:id/students/pdf — manager's printable roster for a
 // class: every enrolled student with DOB, sex and guardian contact info.
 const getClassStudentListPdf = asyncHandler(async (req, res) => {
-  const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  const klass = await Class.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId },
+    include: [{ model: User, as: "classTeacher", attributes: ["name"] }],
+  });
   if (!klass) throw ApiError.notFound("Class not found");
 
   const school = await School.findByPk(req.schoolId);
@@ -127,7 +130,15 @@ const getClassStudentListPdf = asyncHandler(async (req, res) => {
   }));
 
   const pdfBuffer = await generateStudentListPdf(
-    { className: klass.name, rows, generatedAt: new Date().toLocaleDateString() },
+    {
+      className: klass.name,
+      classTeacherName: klass.classTeacher?.name || null,
+      schoolPhone: school.phone,
+      schoolEmail: school.email,
+      schoolAddress: school.address,
+      rows,
+      generatedAt: new Date().toLocaleDateString(),
+    },
     school.name
   );
 

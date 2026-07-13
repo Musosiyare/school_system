@@ -15,6 +15,13 @@ module.exports = (err, req, res, next) => {
     });
   }
 
+  // multer (file upload) errors — e.g. file too large or wrong field name
+  if (err.name === "MulterError") {
+    return res.status(400).json({
+      error: { code: "UPLOAD_ERROR", message: err.message },
+    });
+  }
+
   console.error(err);
   return res.status(500).json({
     error: { code: "SERVER_ERROR", message: "Something went wrong. Please try again." },

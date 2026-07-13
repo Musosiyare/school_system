@@ -2,10 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-html {
-  overflow-x: hidden;
-}
-
+/* overflow-x is set on body only, not html: setting it on both prevents
+   the browser from propagating body's overflow to the viewport, which
+   creates two nested scroll containers (html's and body's) instead of
+   one. That extra scroll container is what was breaking position:sticky
+   on the header/sidebar in Layout.jsx even after the #root fix — they
+   were sticking relative to body's box instead of the true viewport. */
 body {
   background: #f6f7fb;
   color: #1e2433;
@@ -13,9 +15,13 @@ body {
   max-width: 100vw;
 }
 
-#root {
-  overflow-x: clip;
-}
+/* Intentionally no overflow-x rule here: any overflow value on #root
+   (even just on the x-axis) turns it into a scroll container, and that
+   breaks position:sticky on the header/sidebar in Layout.jsx — they'd
+   stick relative to #root instead of the viewport. If horizontal overflow
+   needs containing, do it on a wrapper *inside* <main> (below the sticky
+   header/aside), e.g. the .overflow-x-auto wrapper already used in
+   Reports.jsx for wide tables — not here. */
 
 /* Utility: role accent ring, used on avatars/badges to color-code whose area you're in */
 .role-ring-superuser { box-shadow: 0 0 0 2px #6b46c1; }
@@ -146,6 +152,38 @@ tr.report-avoid-break {
   break-inside: avoid;
   page-break-after: avoid;
   break-after: avoid;
+}
+
+/* --- Modal entrance animation ---------------------------------------------
+   Modal.jsx previously used tailwindcss-animate utility classes
+   (animate-in fade-in zoom-in-95), but that plugin isn't installed, so those
+   classes generated no CSS and modals just popped in instantly. These plain
+   keyframes replace them without needing the plugin. */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.modal-backdrop {
+  animation: modal-backdrop-in 0.18s ease-out both;
+}
+.modal-panel {
+  animation: modal-panel-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-panel {
+    animation: none;
+  }
 }
 
 /* --- Landing page entrance animation -------------------------------------

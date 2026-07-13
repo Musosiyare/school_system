@@ -4,6 +4,8 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
+import Pagination from "../../components/ui/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { Field, Input } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
@@ -21,6 +23,10 @@ import {
   Trash2,
   AlertTriangle,
   ShieldOff,
+  UserPlus,
+  User,
+  Mail,
+  Phone,
 } from "lucide-react";
 
 const emptyForm = { name: "", email: "", phone: "" };
@@ -186,6 +192,9 @@ export default function Teachers() {
     return [t.name, t.email].filter(Boolean).some((field) => field.toLowerCase().includes(q));
   });
 
+  const { pageItems: pagedTeachers, page, setPage, totalPages, total, pageSize } =
+    usePagination(filteredTeachers, 8);
+
   return (
     <div>
       <div className="flex justify-end mb-6">
@@ -230,7 +239,7 @@ export default function Teachers() {
             {teachers.length > 0 && filteredTeachers.length === 0 && (
               <EmptyRow colSpan={5}>No teachers match "{query}".</EmptyRow>
             )}
-            {filteredTeachers.map((t) => {
+            {pagedTeachers.map((t) => {
               const teacherAssignments = assignmentsFor(t.id);
               return (
                 <tr key={t.id}>
@@ -322,6 +331,7 @@ export default function Teachers() {
             })}
           </tbody>
         </Table>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={total} pageSize={pageSize} />
       </Card>
 
       <Modal
@@ -339,15 +349,53 @@ export default function Teachers() {
           </>
         }
       >
-        <form noValidate onSubmit={handleCreate} className="space-y-4">
-          <Field label="Name">
-            <Input value={form.name} onChange={(e) => updateField("name", e.target.value)} required autoFocus />
+        <form noValidate onSubmit={handleCreate} className="space-y-5">
+          <div className="flex items-center gap-3 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-brand-500 flex items-center justify-center">
+              <UserPlus size={17} className="text-white" />
+            </div>
+            <p className="text-xs text-brand-700 leading-snug">
+              A temporary password will be generated automatically — you'll be able to share it
+              with the teacher after creating the account.
+            </p>
+          </div>
+
+          <Field label="Full Name">
+            <div className="relative">
+              <User size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={form.name}
+                onChange={(e) => updateField("name", e.target.value)}
+                placeholder="e.g. Jane Uwimana"
+                className="pl-9"
+                required
+                autoFocus
+              />
+            </div>
           </Field>
           <Field label="Email">
-            <Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} required />
+            <div className="relative">
+              <Mail size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => updateField("email", e.target.value)}
+                placeholder="teacher@school.com"
+                className="pl-9"
+                required
+              />
+            </div>
           </Field>
           <Field label="Phone">
-            <Input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} />
+            <div className="relative">
+              <Phone size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={form.phone}
+                onChange={(e) => updateField("phone", e.target.value)}
+                placeholder="Optional"
+                className="pl-9"
+              />
+            </div>
           </Field>
           <ErrorText>{error}</ErrorText>
         </form>

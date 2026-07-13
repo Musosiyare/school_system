@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import api from "../../api/client";
 import Button from "../../components/ui/Button";
+import Pagination from "../../components/ui/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
-import { Field, Input } from "../../components/ui/FormField";
+import { Field, Input, IconInput } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
@@ -189,6 +191,9 @@ export default function SuperuserDashboard() {
       .some((field) => field.toLowerCase().includes(q));
   });
 
+  const { pageItems: pagedSchools, page: schoolsPage, setPage: setSchoolsPage, totalPages: schoolsTotalPages, total: schoolsTotal, pageSize: schoolsPageSize } =
+    usePagination(filteredSchools, 8);
+
   return (
     <div>
       <div className="flex justify-end mb-6">
@@ -314,7 +319,7 @@ export default function SuperuserDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredSchools.map((s) => (
+            {pagedSchools.map((s) => (
               <div
                 key={s.id}
                 className="rounded-xl border border-slate-200 p-4 flex flex-col gap-3 hover:border-slate-300 transition"
@@ -399,6 +404,13 @@ export default function SuperuserDashboard() {
             ))}
           </div>
         )}
+          <Pagination
+            page={schoolsPage}
+            totalPages={schoolsTotalPages}
+            onPageChange={setSchoolsPage}
+            total={schoolsTotal}
+            pageSize={schoolsPageSize}
+          />
           </div>
         )}
       </div>
@@ -419,40 +431,91 @@ export default function SuperuserDashboard() {
           </>
         }
       >
-        <form noValidate onSubmit={handleCreateSchool} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <p className="sm:col-span-2 text-sm text-slate-500 -mt-1">
-            This creates the school and its first Manager account.
-          </p>
-          <Field label="School Name">
-            <Input value={form.name} onChange={(e) => updateField("name", e.target.value)} required autoFocus />
-          </Field>
-          <Field label="School Email">
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => updateField("email", e.target.value)}
-            />
-          </Field>
-          <Field label="Location / Address">
-            <Input value={form.address} onChange={(e) => updateField("address", e.target.value)} />
-          </Field>
-          <Field label="School Phone">
-            <Input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} />
-          </Field>
-          <Field label="First Manager Name">
-            <Input value={form.managerName} onChange={(e) => updateField("managerName", e.target.value)} required />
-          </Field>
-          <Field label="First Manager Email">
-            <Input
-              type="email"
-              value={form.managerEmail}
-              onChange={(e) => updateField("managerEmail", e.target.value)}
-              required
-            />
-          </Field>
-          <Field label="First Manager Phone">
-            <Input value={form.managerPhone} onChange={(e) => updateField("managerPhone", e.target.value)} />
-          </Field>
+        <form noValidate onSubmit={handleCreateSchool} className="space-y-5">
+          <div className="flex items-center gap-3 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-brand-500 flex items-center justify-center">
+              <SchoolIcon size={16} className="text-white" />
+            </div>
+            <p className="text-xs text-brand-700 leading-snug">
+              This creates the school and its first Manager account, with a temporary password
+              you'll be able to share with them afterward.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2.5">School Details</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="School Name">
+                <IconInput
+                  icon={SchoolIcon}
+                  value={form.name}
+                  onChange={(e) => updateField("name", e.target.value)}
+                  placeholder="e.g. Green Hills Academy"
+                  required
+                  autoFocus
+                />
+              </Field>
+              <Field label="School Email">
+                <IconInput
+                  icon={Mail}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateField("email", e.target.value)}
+                  placeholder="info@school.com"
+                />
+              </Field>
+              <Field label="Location / Address">
+                <IconInput
+                  icon={MapPin}
+                  value={form.address}
+                  onChange={(e) => updateField("address", e.target.value)}
+                  placeholder="Optional"
+                />
+              </Field>
+              <Field label="School Phone">
+                <IconInput
+                  icon={Phone}
+                  value={form.phone}
+                  onChange={(e) => updateField("phone", e.target.value)}
+                  placeholder="Optional"
+                />
+              </Field>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2.5">First Manager</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Manager Name" className="sm:col-span-2">
+                <IconInput
+                  icon={UserCircle2}
+                  value={form.managerName}
+                  onChange={(e) => updateField("managerName", e.target.value)}
+                  placeholder="Full name"
+                  required
+                />
+              </Field>
+              <Field label="Manager Email">
+                <IconInput
+                  icon={Mail}
+                  type="email"
+                  value={form.managerEmail}
+                  onChange={(e) => updateField("managerEmail", e.target.value)}
+                  placeholder="manager@school.com"
+                  required
+                />
+              </Field>
+              <Field label="Manager Phone">
+                <IconInput
+                  icon={Phone}
+                  value={form.managerPhone}
+                  onChange={(e) => updateField("managerPhone", e.target.value)}
+                  placeholder="Optional"
+                />
+              </Field>
+            </div>
+          </div>
+
           <ErrorText>{error}</ErrorText>
         </form>
       </Modal>

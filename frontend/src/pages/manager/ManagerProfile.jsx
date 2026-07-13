@@ -4,11 +4,11 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Tabs from "../../components/ui/Tabs";
-import { Field, Input } from "../../components/ui/FormField";
+import { Field, Input, IconInput } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import ChangePasswordCard from "../../components/ChangePasswordCard";
 import AccountNameCard from "../../components/AccountNameCard";
-import { Building2, UserCircle, KeyRound } from "lucide-react";
+import { Building2, UserCircle, KeyRound, Mail, Phone, MapPin, Image as ImageIcon } from "lucide-react";
 
 const emptyForm = { name: "", address: "", phone: "", email: "", logoUrl: "" };
 
@@ -91,19 +91,19 @@ export default function ManagerProfile() {
           ) : (
             <form noValidate onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
               <Field label="School Name" className="sm:col-span-2">
-                <Input value={form.name} onChange={(e) => updateField("name", e.target.value)} required autoFocus />
+                <IconInput icon={Building2} value={form.name} onChange={(e) => updateField("name", e.target.value)} required autoFocus />
               </Field>
               <Field label="School Email">
-                <Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} />
+                <IconInput icon={Mail} type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} />
               </Field>
               <Field label="Phone">
-                <Input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} />
+                <IconInput icon={Phone} value={form.phone} onChange={(e) => updateField("phone", e.target.value)} />
               </Field>
               <Field label="Address" className="sm:col-span-2">
-                <Input value={form.address} onChange={(e) => updateField("address", e.target.value)} />
+                <IconInput icon={MapPin} value={form.address} onChange={(e) => updateField("address", e.target.value)} />
               </Field>
               <Field label="Logo URL" className="sm:col-span-2">
-                <Input value={form.logoUrl} onChange={(e) => updateField("logoUrl", e.target.value)} />
+                <IconInput icon={ImageIcon} value={form.logoUrl} onChange={(e) => updateField("logoUrl", e.target.value)} />
               </Field>
               <div className="sm:col-span-2 flex items-center gap-3">
                 <Button type="submit" disabled={saving}>

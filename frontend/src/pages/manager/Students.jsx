@@ -3,13 +3,15 @@ import api from "../../api/client";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
-import { Field, Input, Select } from "../../components/ui/FormField";
+import Pagination from "../../components/ui/Pagination";
+import { usePagination } from "../../hooks/usePagination";
+import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
-import { Plus, GraduationCap, Pencil, Trash2, FileDown } from "lucide-react";
+import { Plus, GraduationCap, Pencil, Trash2, FileDown, User, UserCircle2, Phone, Cake, Layers } from "lucide-react";
 
 const emptyForm = { firstName: "", lastName: "", dob: "", sex: "", guardianName: "", guardianPhone: "" };
 
@@ -122,6 +124,9 @@ export default function Students() {
       .some((field) => field.toLowerCase().includes(q));
   });
 
+  const { pageItems: pagedStudents, page, setPage, totalPages, total, pageSize } =
+    usePagination(filteredStudents, 8);
+
   function downloadStudentListPdf() {
     if (!selectedClassId) return;
     const token = localStorage.getItem("token");
@@ -191,7 +196,7 @@ export default function Students() {
                 placeholder="Search by name, ID, or guardian..."
                 className="w-full sm:w-64"
               />
-              <Button size="sm" variant="ghost" onClick={downloadStudentListPdf} disabled={students.length === 0}>
+              <Button size="sm" variant="teal" onClick={downloadStudentListPdf} disabled={students.length === 0}>
                 <FileDown size={14} /> Download List (PDF)
               </Button>
             </div>
@@ -220,7 +225,7 @@ export default function Students() {
               {students.length > 0 && filteredStudents.length === 0 && (
                 <EmptyRow colSpan={6}>No students match "{query}".</EmptyRow>
               )}
-              {filteredStudents.map((s) => (
+              {pagedStudents.map((s) => (
                 <tr key={s.id}>
                   <Td className="font-mono text-slate-500">{s.admissionNumber || "-"}</Td>
                   <Td className="font-medium text-slate-800">
@@ -266,6 +271,7 @@ export default function Students() {
               ))}
             </tbody>
           </Table>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={total} pageSize={pageSize} />
         </Card>
       )}
 
@@ -288,47 +294,90 @@ export default function Students() {
           </>
         }
       >
-        <form noValidate onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-          <Field label="Class" className="col-span-2 max-w-xs">
-            <Select value={formClassId} onChange={(e) => setFormClassId(e.target.value)}>
+        <form noValidate onSubmit={handleSubmit} className="space-y-5">
+          {!editingStudent && (
+            <div className="flex items-center gap-3 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3">
+              <div className="h-9 w-9 shrink-0 rounded-full bg-brand-500 flex items-center justify-center">
+                <GraduationCap size={16} className="text-white" />
+              </div>
+              <p className="text-xs text-brand-700 leading-snug">
+                A 6-digit Student ID is generated automatically once you enroll this student.
+              </p>
+            </div>
+          )}
+
+          <Field label="Class" className="max-w-xs">
+            <IconSelect icon={Layers} value={formClassId} onChange={(e) => setFormClassId(e.target.value)}>
               <option value="">Select a class</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </Select>
+            </IconSelect>
           </Field>
-          <Field label="First Name">
-            <Input value={form.firstName} onChange={(e) => updateField("firstName", e.target.value)} required autoFocus />
-          </Field>
-          <Field label="Last Name">
-            <Input value={form.lastName} onChange={(e) => updateField("lastName", e.target.value)} required />
-          </Field>
-          <Field label="Date of Birth">
-            <Input type="date" value={form.dob} onChange={(e) => updateField("dob", e.target.value)} />
-          </Field>
-          <Field label="Sex">
-            <Select value={form.sex} onChange={(e) => updateField("sex", e.target.value)}>
-              <option value="">Select...</option>
-              <option value="M">Male</option>
-              <option value="F">Female</option>
-            </Select>
-          </Field>
-          <Field label="Guardian Name">
-            <Input value={form.guardianName} onChange={(e) => updateField("guardianName", e.target.value)} />
-          </Field>
-          <Field label="Guardian Phone">
-            <Input value={form.guardianPhone} onChange={(e) => updateField("guardianPhone", e.target.value)} />
-          </Field>
-          {!editingStudent && (
-            <div className="col-span-2 text-xs text-slate-400">
-              A 6-digit Student ID is generated automatically once you enroll this student.
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2.5">Student Details</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="First Name">
+                <IconInput
+                  icon={User}
+                  value={form.firstName}
+                  onChange={(e) => updateField("firstName", e.target.value)}
+                  required
+                  autoFocus
+                />
+              </Field>
+              <Field label="Last Name">
+                <IconInput
+                  icon={User}
+                  value={form.lastName}
+                  onChange={(e) => updateField("lastName", e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Date of Birth">
+                <IconInput
+                  icon={Cake}
+                  type="date"
+                  value={form.dob}
+                  onChange={(e) => updateField("dob", e.target.value)}
+                />
+              </Field>
+              <Field label="Sex">
+                <Select value={form.sex} onChange={(e) => updateField("sex", e.target.value)}>
+                  <option value="">Select...</option>
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                </Select>
+              </Field>
             </div>
-          )}
-          <div className="col-span-2">
-            <ErrorText>{error}</ErrorText>
           </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2.5">Guardian Contact</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Guardian Name">
+                <IconInput
+                  icon={UserCircle2}
+                  value={form.guardianName}
+                  onChange={(e) => updateField("guardianName", e.target.value)}
+                  placeholder="Optional"
+                />
+              </Field>
+              <Field label="Guardian Phone">
+                <IconInput
+                  icon={Phone}
+                  value={form.guardianPhone}
+                  onChange={(e) => updateField("guardianPhone", e.target.value)}
+                  placeholder="Optional"
+                />
+              </Field>
+            </div>
+          </div>
+
+          <ErrorText>{error}</ErrorText>
         </form>
       </Modal>
     </div>

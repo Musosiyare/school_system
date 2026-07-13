@@ -16,13 +16,13 @@ export default function Modal({ open, onClose, title, children, footer, size = "
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`w-full ${widths[size]} max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150`}
+        className={`modal-panel w-full ${widths[size]} max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 shrink-0">

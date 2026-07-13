@@ -3,9 +3,9 @@ import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import Card from "./ui/Card";
 import Button from "./ui/Button";
-import { Field, Input } from "./ui/FormField";
+import { Field, Input, IconInput } from "./ui/FormField";
 import { ErrorText, SuccessText } from "./ui/Alerts";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Lock } from "lucide-react";
 
 // Self-service password change, used from the Profile pages (as opposed to
 // pages/ChangePassword.jsx, which is the forced full-screen flow shown on
@@ -53,7 +53,8 @@ export default function ChangePasswordCard({ className = "" }) {
     >
       <form noValidate onSubmit={handleSubmit} className="space-y-4 max-w-sm">
         <Field label="New Password (min 8 characters)">
-          <Input
+          <IconInput
+            icon={Lock}
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
@@ -62,7 +63,8 @@ export default function ChangePasswordCard({ className = "" }) {
           />
         </Field>
         <Field label="Confirm New Password">
-          <Input
+          <IconInput
+            icon={Lock}
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}

@@ -4,7 +4,7 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
-import { Field, Input } from "../../components/ui/FormField";
+import { Field, Input, IconInput } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
@@ -223,13 +223,18 @@ export default function AcademicYears() {
         }
       >
         <form noValidate onSubmit={handleCreate} className="space-y-4">
+          <div className="flex items-center gap-3 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-brand-500 flex items-center justify-center">
+              <CalendarRange size={16} className="text-white" />
+            </div>
+            <p className="text-xs text-brand-700 leading-snug">
+              Creating an academic year automatically creates Term 1, Term 2, and Term 3.
+            </p>
+          </div>
           <Field label="Name (e.g. 2026-2027)">
-            <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+            <IconInput icon={CalendarRange} value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </Field>
           <ErrorText>{error}</ErrorText>
-          <p className="text-xs text-slate-400">
-            Creating an academic year automatically creates Term 1, Term 2, and Term 3.
-          </p>
         </form>
       </Modal>
     </div>

@@ -4,6 +4,8 @@ const VARIANTS = {
   danger: "bg-red-600 text-white hover:bg-red-700",
   ghost: "bg-transparent text-slate-600 hover:bg-slate-100",
   teal: "bg-teal-500 text-white hover:bg-teal-600",
+  violet: "bg-violet-600 text-white hover:bg-violet-700",
+  amber: "bg-amber-500 text-white hover:bg-amber-600",
 };
 
 const SIZES = {
