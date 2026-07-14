@@ -468,6 +468,42 @@ function outerBorder(content) {
   };
 }
 
+// Watermark shows the FULL school name (no longer abbreviated to just the
+// first word). Mirrors watermarkText() in frontend/src/pages/Reports.jsx so
+// the on-screen/print watermark and the PDF watermark always show the same
+// text.
+function watermarkText(schoolName) {
+  return (schoolName || "School").trim().toUpperCase();
+}
+
+// Faint diagonal school-name watermark, drawn ONCE (not tiled) and centered
+// behind the report card content on every page. Returned as a pdfmake
+// `background` function so it's redrawn automatically on each physical page
+// (including every student's page in a full-class export). Very low
+// opacity keeps it from interfering with legibility or B&W printing.
+// Mirrors the identical single diagonal watermark drawn in the on-screen/
+// print view — see the <svg className="report-watermark-svg"> in
+// frontend/src/pages/Reports.jsx.
+function diagonalWatermarkSvg(schoolName) {
+  const word = watermarkText(schoolName);
+  const svg = `
+    <svg viewBox="0 0 640 900" xmlns="http://www.w3.org/2000/svg">
+      <text x="320" y="450" font-size="52" font-weight="700" fill="#000000" fill-opacity="0.08" letter-spacing="2" text-anchor="middle" transform="rotate(-28 320 450)">${word}</text>
+    </svg>`;
+  return function (currentPage, pageSize) {
+    const width = Math.min(480, pageSize.width - 72);
+    const height = (width * 900) / 640;
+    return {
+      svg,
+      width,
+      absolutePosition: {
+        x: (pageSize.width - width) / 2,
+        y: pageSize.height / 2 - height / 2,
+      },
+    };
+  };
+}
+
 function reportCardContent(report, schoolName, schoolAddress, className, termName, schoolManagerName, schoolEmail, schoolPhone) {
   return [
     outerBorder(
@@ -506,6 +542,7 @@ function generateReportCardPdf(
 ) {
   const docDefinition = {
     pageMargins: [36, 36, 36, 36],
+    background: diagonalWatermarkSvg(schoolName),
     content: reportCardContent(
       report,
       schoolName,
@@ -560,6 +597,7 @@ function generateClassReportPdf(
 
   const docDefinition = {
     pageMargins: [36, 36, 36, 36],
+    background: diagonalWatermarkSvg(schoolName),
     content,
     defaultStyle: { font: "Roboto", fontSize: 10, color: BLACK },
   };

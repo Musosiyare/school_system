@@ -85,6 +85,34 @@ body {
     print-color-adjust: exact;
     color-adjust: exact;
   }
+  /* The blanket rule above forces solid white backgrounds and black text
+     everywhere, which would blank out the watermark (its faint fill is set
+     via the SVG `fill`/`fill-opacity` attributes, and a forced white
+     background on the <svg> box would paint over the report content it
+     sits on top of). These rules target the watermark specifically with
+     higher selector specificity (#print-root .report-watermark-svg beats
+     #print-root *), so they win the cascade and the watermark still prints
+     exactly as faint as on screen. */
+  #print-root .report-watermark-svg,
+  #print-root .report-watermark-svg * {
+    background: transparent !important;
+  }
+  /* Gives .report-card-page a floor of exactly one A4 page's content height
+     (297mm minus the 12mm top+bottom @page margin above = 273mm). The
+     signatures+footer block is `position: absolute; bottom: 14` inside this
+     card (see ReportCardTable in Reports.jsx) — with no min-height, the
+     card would only be as tall as its content, so "bottom: 14" would land
+     wherever that content happened to end, not at the actual bottom of the
+     printed page. With the floor in place, bottom:14 always lands at the
+     true bottom of the page, so the footer can never be left with "just
+     barely not enough room" and pushed onto a second, near-empty page. A
+     card whose content is genuinely taller than one page still falls back
+     to natural pagination — min-height only sets a floor, it never clips or
+     forces overflow. */
+  #print-root .report-card-page {
+    min-height: 273mm;
+    box-sizing: border-box;
+  }
 }
 
 /* Report tables: plain, black, no color — used both on screen for the
@@ -153,6 +181,12 @@ tr.report-avoid-break {
   page-break-after: avoid;
   break-after: avoid;
 }
+
+/* The curved school-name watermark (report-watermark-svg) is styled inline
+   in Reports.jsx, since its size/position needs to stay in sync with the
+   <svg viewBox> and <path> arc coordinates defined right next to it. The
+   print-specific override that keeps it visible under the B&W print rule
+   lives above, in the @media print block. */
 
 /* --- Modal entrance animation ---------------------------------------------
    Modal.jsx previously used tailwindcss-animate utility classes

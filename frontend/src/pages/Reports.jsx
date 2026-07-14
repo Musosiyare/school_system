@@ -62,6 +62,16 @@ function overallGradeColor(weightedAverage) {
   return "#6b7280"; // N/A — gray
 }
 
+// Watermark shows the FULL school name (no longer abbreviated to just the
+// first word). Mirrors watermarkText() in
+// backend/src/services/pdfService.js so the on-screen/print watermark and
+// the PDF watermark always show the same text.
+function watermarkText(schoolName) {
+  return (schoolName || "School").trim().toUpperCase();
+}
+
+
+
 const th = { textAlign: "left" };
 const center = { textAlign: "center" };
 
@@ -104,7 +114,10 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
     // (banner, student panel, summary strip, signatures) stay plain white
     // with no border of their own — only the Academic Performance table
     // keeps its own bordered grid.
-    <div className="report-card-page" style={{ border: "1.5px solid #000", padding: 14 }}>
+    <div
+      className="report-card-page"
+      style={{ border: "1.5px solid #000", padding: "14px 14px 90px", position: "relative" }}
+    >
       {/* Banner: centered title/term on top, then school (left) and
           labeled student details (right) below — mirrors the PDF's
           letterhead() layout. Every line uses the same font size. */}
@@ -264,42 +277,98 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
 
       <SectionLabel>SIGNATURES</SectionLabel>
 
-      <div className="report-avoid-break" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 11 }}>{report.classTeacherName || "Not assigned"}</div>
-          <div style={{ fontSize: 8, color: "#000" }}>CLASS TEACHER</div>
+      {/* Signatures + footer are wrapped together and pinned with
+          `position: absolute; bottom: 14` inside the card (which is
+          `position: relative` — see the outer div below). Anchoring it to
+          the card's own bottom edge, instead of just letting it sit
+          wherever normal document flow happens to end, is what stops it
+          from being pushed to a second page: its vertical position no
+          longer depends on how tall the content above it turned out to be,
+          so there's never a "not quite enough room left" gap for the
+          browser to shove it into on its own page. Combined with
+          .report-card-page's print-only min-height of one A4 page (see
+          index.css), bottom:14 always lands at the true bottom of the
+          printed page. The card's own bottom padding (see
+          .report-card-page below) is widened to keep the table/summary
+          content from visually running into this reserved area. */}
+      <div
+        className="report-avoid-break"
+        style={{ position: "absolute", left: 14, right: 14, bottom: 14 }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 11 }}>{report.classTeacherName || "Not assigned"}</div>
+            <div style={{ fontSize: 8, color: "#000" }}>CLASS TEACHER</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: 700, fontSize: 11 }}>{report.schoolManagerName || "Not assigned"}</div>
+            <div style={{ fontSize: 8, color: "#000" }}>SCHOOL MANAGER</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontWeight: 700, fontSize: 11 }}>{report.student?.guardianName || "Not assigned"}</div>
+            <div style={{ fontSize: 8, color: "#000" }}>PARENT/GUARDIAN</div>
+          </div>
         </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontWeight: 700, fontSize: 11 }}>{report.schoolManagerName || "Not assigned"}</div>
-          <div style={{ fontSize: 8, color: "#000" }}>SCHOOL MANAGER</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontWeight: 700, fontSize: 11 }}>{report.student?.guardianName || "Not assigned"}</div>
-          <div style={{ fontSize: 8, color: "#000" }}>PARENT/GUARDIAN</div>
+
+        {/* Footer: generated date + class name, replacing the per-signature
+            date lines. Intentionally kept a lighter gray — this is a print
+            timestamp, not report content. */}
+        <div
+          style={{
+            borderTop: "1px solid #d1d5db",
+            marginTop: 16,
+            paddingTop: 6,
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 8.5,
+            color: "#6b7280",
+          }}
+        >
+          <span>
+            Generated:{" "}
+            {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+          </span>
+          <span>Class: {className || report.student?.class || "-"}</span>
         </div>
       </div>
 
-      {/* Footer: generated date + class name, replacing the per-signature
-          date lines. Intentionally kept a lighter gray — this is a print
-          timestamp, not report content. */}
-      <div
-        className="report-avoid-break"
+      {/* Faint diagonal school-name watermark, shown ONCE, centered and
+          layered on top of the whole card at very low opacity so it always
+          shows regardless of which sections behind it have solid white
+          fills (an earlier version placed it behind the content, which
+          made it invisible under the Academic Performance table's opaque
+          background). Shows the FULL school name (previously only the
+          first word was shown). Mirrors the identical single diagonal
+          watermark drawn on every page of the PDF export — see
+          diagonalWatermarkSvg() in backend/src/services/pdfService.js. */}
+      <svg
+        className="report-watermark-svg"
+        viewBox="0 0 640 900"
+        aria-hidden="true"
         style={{
-          borderTop: "1px solid #d1d5db",
-          marginTop: 16,
-          paddingTop: 6,
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: 8.5,
-          color: "#6b7280",
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "92%",
+          maxWidth: 620,
+          pointerEvents: "none",
         }}
       >
-        <span>
-          Generated:{" "}
-          {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-        </span>
-        <span>Class: {className || report.student?.class || "-"}</span>
-      </div>
+        <text
+          x="320"
+          y="450"
+          fontSize="52"
+          fontWeight="700"
+          fill="#000000"
+          fillOpacity="0.08"
+          letterSpacing="2"
+          textAnchor="middle"
+          transform="rotate(-28 320 450)"
+        >
+          {watermarkText(schoolName)}
+        </text>
+      </svg>
     </div>
   );
 }
