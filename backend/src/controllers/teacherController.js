@@ -4,6 +4,7 @@ const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const generateTempPassword = require("../utils/generatePassword");
 const { encryptTempPassword, decryptTempPassword } = require("../utils/tempCredentials");
+const { logActivity } = require("../utils/activityLogger");
 
 // POST /api/teachers (FR-3.1)
 const createTeacher = asyncHandler(async (req, res) => {
@@ -29,6 +30,15 @@ const createTeacher = asyncHandler(async (req, res) => {
     tempPasswordEncrypted: encryptTempPassword(tempPassword),
     tempPasswordSetAt: new Date(),
     tempPasswordSetBy: req.user.id,
+  });
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "teacher.created",
+    description: `Added teacher ${teacher.name}`,
+    entityType: "teacher",
+    entityId: teacher.id,
   });
 
   res.status(201).json({
@@ -98,6 +108,15 @@ const resetTeacherPassword = asyncHandler(async (req, res) => {
   teacher.tokenVersion += 1;
   await teacher.save();
 
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "teacher.password_reset",
+    description: `Reset password for teacher ${teacher.name}`,
+    entityType: "teacher",
+    entityId: teacher.id,
+  });
+
   res.json({
     teacher: { id: teacher.id, name: teacher.name, email: teacher.email },
     temporaryPassword: tempPassword,
@@ -141,6 +160,15 @@ const deleteTeacher = asyncHandler(async (req, res) => {
     await teacher.destroy({ transaction: t });
   });
 
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "teacher.deleted",
+    description: `Deleted teacher ${teacher.name}`,
+    entityType: "teacher",
+    entityId: teacher.id,
+  });
+
   res.json({ message: "Teacher deleted successfully" });
 });
 
@@ -162,6 +190,15 @@ const updateTeacherStatus = asyncHandler(async (req, res) => {
 
   teacher.status = status;
   await teacher.save();
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: status === "active" ? "teacher.activated" : "teacher.deactivated",
+    description: `${status === "active" ? "Activated" : "Deactivated"} teacher ${teacher.name}`,
+    entityType: "teacher",
+    entityId: teacher.id,
+  });
 
   res.json({
     teacher: { id: teacher.id, name: teacher.name, email: teacher.email, status: teacher.status },

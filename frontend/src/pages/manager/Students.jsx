@@ -7,9 +7,10 @@ import Pagination from "../../components/ui/Pagination";
 import ArchivedYearBanner from "../../components/ArchivedYearBanner";
 import { useYear } from "../../context/YearContext";
 import { usePagination } from "../../hooks/usePagination";
+import { useSort } from "../../hooks/useSort";
 import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
-import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
+import { Table, Thead, Th, SortableTh, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
@@ -133,8 +134,16 @@ export default function Students() {
       .some((field) => field.toLowerCase().includes(q));
   });
 
+  const { sorted: sortedStudents, sort, toggleSort } = useSort(filteredStudents, {
+    admissionNumber: (s) => s.admissionNumber,
+    name: (s) => `${s.firstName} ${s.lastName}`.toLowerCase(),
+    dob: (s) => (s.dob ? new Date(s.dob).getTime() : null),
+    sex: (s) => s.sex,
+    guardian: (s) => s.guardianName?.toLowerCase(),
+  });
+
   const { pageItems: pagedStudents, page, setPage, totalPages, total, pageSize } =
-    usePagination(filteredStudents, 8);
+    usePagination(sortedStudents, 8);
 
   function downloadStudentListPdf() {
     if (!selectedClassId) return;
@@ -217,11 +226,11 @@ export default function Students() {
           <Table>
             <Thead>
               <tr>
-                <Th>Student ID</Th>
-                <Th>Name</Th>
-                <Th>DOB</Th>
-                <Th>Sex</Th>
-                <Th>Guardian</Th>
+                <SortableTh sortKey="admissionNumber" sort={sort} onSort={toggleSort}>Student ID</SortableTh>
+                <SortableTh sortKey="name" sort={sort} onSort={toggleSort}>Name</SortableTh>
+                <SortableTh sortKey="dob" sort={sort} onSort={toggleSort}>DOB</SortableTh>
+                <SortableTh sortKey="sex" sort={sort} onSort={toggleSort}>Sex</SortableTh>
+                <SortableTh sortKey="guardian" sort={sort} onSort={toggleSort}>Guardian</SortableTh>
                 <Th className="text-right">Actions</Th>
               </tr>
             </Thead>

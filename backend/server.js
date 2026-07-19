@@ -19,6 +19,7 @@ const termRoutes = require("./src/routes/termRoutes");
 const notificationRoutes = require("./src/routes/notificationRoutes");
 const statisticsRoutes = require("./src/routes/statisticsRoutes");
 const settingsRoutes = require("./src/routes/settingsRoutes");
+const activityLogRoutes = require("./src/routes/activityLogRoutes");
 const { getSettingsRow } = require("./src/controllers/settingsController");
 const errorHandler = require("./src/middleware/errorHandler");
 
@@ -42,6 +43,7 @@ app.use("/api/terms", termRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/statistics", statisticsRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/activity-logs", activityLogRoutes);
 
 // 404 handler
 app.use((req, res) => {

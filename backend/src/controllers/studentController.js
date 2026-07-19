@@ -4,6 +4,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const generateStudentId = require("../utils/generateStudentId");
 const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
 const { generateStudentListPdf, generateStudentRosterPdf } = require("../services/pdfService");
+const { logActivity } = require("../utils/activityLogger");
 
 // POST /api/students — always enrolls into a class in the current academic
 // year, and records that enrollment so this year's roster stays correct
@@ -48,6 +49,15 @@ const createStudent = asyncHandler(async (req, res) => {
     classId,
     academicYearId: klass.academicYearId,
     schoolId: req.schoolId,
+  });
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "student.created",
+    description: `Added student ${student.firstName} ${student.lastName} to ${klass.name}`,
+    entityType: "student",
+    entityId: student.id,
   });
 
   res.status(201).json({ student });
@@ -98,6 +108,15 @@ const updateStudent = asyncHandler(async (req, res) => {
 
   await student.save();
 
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "student.updated",
+    description: `Updated details for student ${student.firstName} ${student.lastName}`,
+    entityType: "student",
+    entityId: student.id,
+  });
+
   res.json({ student });
 });
 
@@ -122,7 +141,18 @@ const deleteStudent = asyncHandler(async (req, res) => {
   }
 
   await ReportRemark.destroy({ where: { studentId: student.id } });
+  const studentName = `${student.firstName} ${student.lastName}`;
+  const studentId = student.id;
   await student.destroy();
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "student.deleted",
+    description: `Deleted student ${studentName}`,
+    entityType: "student",
+    entityId: studentId,
+  });
 
   res.json({ message: "Student deleted" });
 });

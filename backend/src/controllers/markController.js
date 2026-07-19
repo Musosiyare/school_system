@@ -4,6 +4,7 @@ const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { assertCurrentYear } = require("../utils/academicYear");
 const { generateMarksEvidencePdf } = require("../services/pdfService");
+const { logActivity } = require("../utils/activityLogger");
 
 async function assertTeacherIsAssigned(userId, role, moduleId, classId) {
   if (role === "manager") return; // manager can view/manage all
@@ -93,6 +94,20 @@ const submitMarks = asyncHandler(async (req, res) => {
     entries,
     userId: req.user.id,
     schoolId: req.schoolId,
+  });
+
+  const [klass, module, term] = await Promise.all([
+    Class.findByPk(classId),
+    Module.findByPk(moduleId),
+    Term.findByPk(termId),
+  ]);
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "marks.recorded",
+    description: `Recorded ${entries.length} mark${entries.length > 1 ? "s" : ""} for ${module?.moduleTitle || "a module"} — ${klass?.name || "a class"} (${term?.name || "a term"})`,
+    entityType: "class",
+    entityId: Number(classId),
   });
 
   res.status(201).json({ marks: results });
@@ -335,6 +350,16 @@ const importMarksTemplate = asyncHandler(async (req, res) => {
     entries,
     userId: req.user.id,
     schoolId: req.schoolId,
+  });
+
+  const [klass, term] = await Promise.all([Class.findByPk(numericClassId), Term.findByPk(termId)]);
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "marks.imported",
+    description: `Imported ${results.length} mark${results.length > 1 ? "s" : ""} for ${module?.moduleTitle || "a module"} — ${klass?.name || "a class"} (${term?.name || "a term"})`,
+    entityType: "class",
+    entityId: numericClassId,
   });
 
   res.status(201).json({ marks: results, imported: results.length, warnings });

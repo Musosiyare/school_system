@@ -27,6 +27,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Wrench,
+  History,
 } from "lucide-react";
 
 const ROLE_META = {
@@ -41,6 +42,7 @@ const ROLE_META = {
 const NAV = {
   superuser: [
     { to: "/superuser", label: "Schools", icon: School },
+    { to: "/superuser/activity", label: "Activity", icon: History },
     { to: "/superuser/profile", label: "Profile", icon: UserCog },
   ],
   manager: [
@@ -53,6 +55,7 @@ const NAV = {
     { to: "/manager/assignments", label: "Assignments", icon: ClipboardList },
     { to: "/manager/reports", label: "Reports", icon: FileText },
     { to: "/manager/statistics", label: "Statistics", icon: BarChart3 },
+    { to: "/manager/activity", label: "Activity", icon: History },
     { to: "/manager/profile", label: "Profile", icon: UserCog },
   ],
   teacher: [
@@ -60,6 +63,7 @@ const NAV = {
     { to: "/teacher/marks", label: "Record Marks", icon: PencilLine },
     { to: "/teacher/marks-status", label: "Marks Status", icon: BellRing },
     { to: "/teacher/reports", label: "Reports", icon: FileText },
+    { to: "/teacher/activity", label: "Activity", icon: History },
     { to: "/teacher/profile", label: "Profile", icon: UserCog },
   ],
 };
@@ -69,6 +73,11 @@ const NAV = {
 const PAGE_META = {
   "/superuser": { title: "Schools", subtitle: "Every school on the platform.", icon: School },
   "/superuser/profile": { title: "Profile", subtitle: "Manage your account settings.", icon: UserCog },
+  "/superuser/activity": {
+    title: "Activity Log",
+    subtitle: "A history of actions you've taken in the system.",
+    icon: History,
+  },
   "/manager": {
     title: (user) => `Welcome back, ${user.name?.split(" ")[0] || ""}`,
     subtitle: "Here's your school at a glance.",
@@ -95,6 +104,11 @@ const PAGE_META = {
     icon: BarChart3,
   },
   "/manager/profile": { title: "Profile", subtitle: "Your account and school settings.", icon: UserCog },
+  "/manager/activity": {
+    title: "Activity Log",
+    subtitle: "A history of actions you've taken in the system.",
+    icon: History,
+  },
   "/teacher": {
     title: (user) => `Welcome back, ${user.name?.split(" ")[0] || ""}`,
     subtitle: "What you're teaching this year.",
@@ -108,6 +122,11 @@ const PAGE_META = {
   },
   "/teacher/reports": { title: "Reports", subtitle: "Class rankings and report cards.", icon: FileText },
   "/teacher/profile": { title: "Profile", subtitle: "Manage your account settings.", icon: UserCog },
+  "/teacher/activity": {
+    title: "Activity Log",
+    subtitle: "A history of actions you've taken in the system.",
+    icon: History,
+  },
 };
 
 export default function Layout({ children }) {

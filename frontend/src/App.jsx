@@ -13,6 +13,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ChangePassword from "./pages/ChangePassword";
 import Reports from "./pages/Reports";
+import ActivityLog from "./pages/ActivityLog";
 
 import SuperuserDashboard from "./pages/superuser/SuperuserDashboard";
 import SuperuserProfile from "./pages/superuser/SuperuserProfile";
@@ -61,6 +62,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["superuser"]}>
                   <SuperuserProfile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/superuser/activity"
+              element={
+                <ProtectedRoute roles={["superuser"]}>
+                  <ActivityLog />
                 </ProtectedRoute>
               }
             />
@@ -145,6 +154,14 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/manager/activity"
+              element={
+                <ProtectedRoute roles={["manager"]}>
+                  <ActivityLog />
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="/teacher"
@@ -183,6 +200,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["teacher"]}>
                   <TeacherProfile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/teacher/activity"
+              element={
+                <ProtectedRoute roles={["teacher"]}>
+                  <ActivityLog />
                 </ProtectedRoute>
               }
             />

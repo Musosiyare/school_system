@@ -13,6 +13,7 @@ const Mark = require("./Mark");
 const ReportRemark = require("./ReportRemark");
 const Notification = require("./Notification");
 const SystemSetting = require("./SystemSetting");
+const ActivityLog = require("./ActivityLog");
 
 // School -> Users, AcademicYears, Classes, Modules, Students
 School.hasMany(User, { foreignKey: "schoolId" });
@@ -109,6 +110,12 @@ Notification.belongsTo(Module, { foreignKey: "moduleId" });
 Term.hasMany(Notification, { foreignKey: "termId" });
 Notification.belongsTo(Term, { foreignKey: "termId" });
 
+// Activity logs — a personal history of actions each user has taken.
+// Deliberately just belongsTo User, not the other direction with an alias —
+// nothing ever needs "give me all logs for this user" from the User side.
+User.hasMany(ActivityLog, { foreignKey: "userId" });
+ActivityLog.belongsTo(User, { foreignKey: "userId" });
+
 module.exports = {
   sequelize,
   School,
@@ -125,4 +132,5 @@ module.exports = {
   ReportRemark,
   Notification,
   SystemSetting,
+  ActivityLog,
 };

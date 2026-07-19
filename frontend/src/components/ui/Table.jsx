@@ -1,3 +1,5 @@
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+
 export function Table({ children }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -12,6 +14,29 @@ export function Thead({ children }) {
 
 export function Th({ children, className = "" }) {
   return <th className={`text-left font-semibold px-4 py-2.5 ${className}`}>{children}</th>;
+}
+
+// Clickable column header for tables that support client-side sorting.
+// `sortKey` identifies this column; `sort` is the { key, dir } state from
+// useSort; `onSort` toggles it. Shows a neutral both-ways icon until this
+// column becomes the active sort, then an up/down arrow for the direction.
+export function SortableTh({ children, sortKey, sort, onSort, className = "" }) {
+  const active = sort?.key === sortKey;
+  const Icon = active ? (sort.dir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
+  return (
+    <th className={`text-left font-semibold px-4 py-2.5 ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 hover:text-slate-700 transition ${
+          active ? "text-slate-700" : ""
+        }`}
+      >
+        {children}
+        <Icon size={13} className={active ? "text-slate-600" : "text-slate-300"} />
+      </button>
+    </th>
+  );
 }
 
 export function Td({ children, className = "" }) {

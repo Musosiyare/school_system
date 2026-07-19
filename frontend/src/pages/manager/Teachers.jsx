@@ -6,9 +6,10 @@ import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import Pagination from "../../components/ui/Pagination";
 import { usePagination } from "../../hooks/usePagination";
+import { useSort } from "../../hooks/useSort";
 import { Field, Input } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
-import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
+import { Table, Thead, Th, SortableTh, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import {
@@ -192,8 +193,14 @@ export default function Teachers() {
     return [t.name, t.email].filter(Boolean).some((field) => field.toLowerCase().includes(q));
   });
 
+  const { sorted: sortedTeachers, sort, toggleSort } = useSort(filteredTeachers, {
+    name: (t) => t.name?.toLowerCase(),
+    status: (t) => t.status,
+    teaching: (t) => assignmentsFor(t.id).length,
+  });
+
   const { pageItems: pagedTeachers, page, setPage, totalPages, total, pageSize } =
-    usePagination(filteredTeachers, 8);
+    usePagination(sortedTeachers, 8);
 
   return (
     <div>
@@ -220,10 +227,10 @@ export default function Teachers() {
         <Table>
           <Thead>
             <tr>
-              <Th>Name</Th>
-              <Th>Status</Th>
+              <SortableTh sortKey="name" sort={sort} onSort={toggleSort}>Name</SortableTh>
+              <SortableTh sortKey="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
               <Th>Credentials</Th>
-              <Th>Teaching</Th>
+              <SortableTh sortKey="teaching" sort={sort} onSort={toggleSort}>Teaching</SortableTh>
               <Th className="text-right">Actions</Th>
             </tr>
           </Thead>

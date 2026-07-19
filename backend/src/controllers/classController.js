@@ -15,6 +15,7 @@ const {
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
+const { logActivity } = require("../utils/activityLogger");
 
 const CLASS_CATEGORIES = ["TSS", "GE"];
 
@@ -42,6 +43,16 @@ const createClass = asyncHandler(async (req, res) => {
     name,
     category: category || "GE",
   });
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "class.created",
+    description: `Created class ${klass.name}`,
+    entityType: "class",
+    entityId: klass.id,
+  });
+
   res.status(201).json({ class: klass });
 });
 
@@ -70,8 +81,20 @@ const setClassName = asyncHandler(async (req, res) => {
     }
   }
 
+  const previousName = klass.name;
   klass.name = trimmed;
   await klass.save();
+
+  if (previousName !== trimmed) {
+    await logActivity({
+      userId: req.user.id,
+      schoolId: req.schoolId,
+      action: "class.renamed",
+      description: `Renamed class "${previousName}" to "${trimmed}"`,
+      entityType: "class",
+      entityId: klass.id,
+    });
+  }
 
   res.json({ class: klass });
 });
@@ -190,6 +213,15 @@ const deleteClass = asyncHandler(async (req, res) => {
     await klass.destroy({ transaction: t });
   });
 
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "class.deleted",
+    description: `Deleted class ${klass.name}`,
+    entityType: "class",
+    entityId: klass.id,
+  });
+
   res.json({ message: "Class deleted" });
 });
 
@@ -263,8 +295,19 @@ const assignClassTeacher = asyncHandler(async (req, res) => {
   await assertCurrentYear(klass.academicYearId, req.schoolId);
 
   if (teacherId === null || teacherId === undefined) {
+    const hadTeacher = klass.classTeacherId;
     klass.classTeacherId = null;
     await klass.save();
+    if (hadTeacher) {
+      await logActivity({
+        userId: req.user.id,
+        schoolId: req.schoolId,
+        action: "class.teacher_unassigned",
+        description: `Removed class teacher from ${klass.name}`,
+        entityType: "class",
+        entityId: klass.id,
+      });
+    }
     return res.json({ class: klass });
   }
 
@@ -275,6 +318,15 @@ const assignClassTeacher = asyncHandler(async (req, res) => {
 
   klass.classTeacherId = teacherId;
   await klass.save();
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "class.teacher_assigned",
+    description: `Assigned ${teacher.name} as class teacher for ${klass.name}`,
+    entityType: "class",
+    entityId: klass.id,
+  });
 
   res.json({ class: klass });
 });

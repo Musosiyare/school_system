@@ -6,6 +6,7 @@ const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendPasswordResetEmail } = require("../utils/mailer");
 const { getMaintenanceFlag } = require("./settingsController");
+const { logActivity } = require("../utils/activityLogger");
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -124,6 +125,15 @@ const changePassword = asyncHandler(async (req, res) => {
   user.passwordChangedAt = new Date();
   await user.save();
 
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.user.schoolId,
+    action: "account.password_changed",
+    description: "Changed your account password",
+    entityType: "user",
+    entityId: user.id,
+  });
+
   res.json({ message: "Password updated successfully" });
 });
 
@@ -146,6 +156,9 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   const user = await User.findByPk(req.user.id);
   if (!user) throw ApiError.notFound("User not found");
+
+  const previousName = user.name;
+  const previousEmail = user.email;
 
   if (email !== undefined) {
     // Self-service email changes are superuser-only. Managers/teachers get
@@ -173,6 +186,27 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   user.name = name.trim();
   await user.save();
+
+  if (user.name !== previousName) {
+    await logActivity({
+      userId: req.user.id,
+      schoolId: req.user.schoolId,
+      action: "account.name_updated",
+      description: `Changed your name from "${previousName}" to "${user.name}"`,
+      entityType: "user",
+      entityId: user.id,
+    });
+  }
+  if (user.email !== previousEmail) {
+    await logActivity({
+      userId: req.user.id,
+      schoolId: req.user.schoolId,
+      action: "account.email_updated",
+      description: `Changed your login email from ${previousEmail} to ${user.email}`,
+      entityType: "user",
+      entityId: user.id,
+    });
+  }
 
   res.json({
     user: {
@@ -276,6 +310,15 @@ const resetPassword = asyncHandler(async (req, res) => {
   user.resetTokenExpiresAt = null;
   user.tokenVersion += 1;
   await user.save();
+
+  await logActivity({
+    userId: user.id,
+    schoolId: user.schoolId,
+    action: "account.password_changed",
+    description: "Reset your account password via the forgot-password link",
+    entityType: "user",
+    entityId: user.id,
+  });
 
   res.json({ message: "Password updated successfully. You can now sign in." });
 });
