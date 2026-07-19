@@ -1,6 +1,7 @@
 const { TeacherModuleAssignment, User, Module, Class, ClassModule } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
 
 // POST /api/assignments — assign a subject teacher to a module for a class (FR-2.5)
 const createAssignment = asyncHandler(async (req, res) => {
@@ -22,6 +23,7 @@ const createAssignment = asyncHandler(async (req, res) => {
 
   const klass = await Class.findOne({ where: { id: classId, schoolId: req.schoolId } });
   if (!klass) throw ApiError.badRequest("Invalid classId for this school");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
 
   // The academic year is a property of the class, not something a manager
   // should have to pick a second time by hand (it can only ever be the
@@ -61,11 +63,19 @@ const listTeacherAssignments = asyncHandler(async (req, res) => {
   }
 
   // A teacher's own class/module picker (used to enter marks, download
-  // templates, etc.) should never surface a suspended class — the
-  // manager-facing assignment list (listAllAssignments below) is untouched,
-  // so old assignments stay visible there for record-keeping.
+  // templates, etc.) should only ever show the current year's assignments —
+  // last year's assignments would otherwise still show up here forever,
+  // since assignment rows are never deleted just because the year ended.
+  // The manager-facing assignment list (listAllAssignments below) is
+  // untouched, so old assignments stay visible there for record-keeping.
+  const where = { teacherId };
+  if (req.user.role === "teacher") {
+    const currentYear = await getCurrentAcademicYear(req.schoolId);
+    where.academicYearId = currentYear ? currentYear.id : 0;
+  }
+
   let assignments = await TeacherModuleAssignment.findAll({
-    where: { teacherId },
+    where,
     include: [Module, Class],
   });
 
@@ -95,6 +105,7 @@ const deleteAssignment = asyncHandler(async (req, res) => {
   if (!assignment || assignment.Class.schoolId !== req.schoolId) {
     throw ApiError.notFound("Assignment not found");
   }
+  await assertCurrentYear(assignment.academicYearId, req.schoolId);
   await assignment.destroy();
   res.json({ message: "Assignment removed" });
 });
@@ -110,6 +121,7 @@ const updateAssignment = asyncHandler(async (req, res) => {
   if (!assignment || assignment.Class.schoolId !== req.schoolId) {
     throw ApiError.notFound("Assignment not found");
   }
+  await assertCurrentYear(assignment.academicYearId, req.schoolId);
 
   const teacher = await User.findOne({
     where: { id: teacherId, schoolId: req.schoolId, role: "teacher" },

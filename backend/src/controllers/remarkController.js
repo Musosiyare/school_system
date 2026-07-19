@@ -1,6 +1,7 @@
-const { ReportRemark, Student, Class } = require("../models");
+const { ReportRemark, Student, Class, Term } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { assertCurrentYear } = require("../utils/academicYear");
 
 // PUT /api/students/:studentId/remarks/:termId
 const setRemark = asyncHandler(async (req, res) => {
@@ -14,6 +15,10 @@ const setRemark = asyncHandler(async (req, res) => {
   if (req.user.role === "teacher" && student.Class.classTeacherId !== req.user.id) {
     throw ApiError.forbidden("You can only add remarks for your own class");
   }
+
+  const term = await Term.findByPk(req.params.termId);
+  if (!term) throw ApiError.notFound("Term not found");
+  await assertCurrentYear(term.academicYearId, req.schoolId);
 
   const [remark] = await ReportRemark.findOrCreate({
     where: { studentId: student.id, termId: req.params.termId },

@@ -7,33 +7,121 @@ const {
   AcademicYear,
   Mark,
   Student,
+  StudentEnrollment,
   Term,
   TeacherModuleAssignment,
   Notification,
 } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
 
-// POST /api/classes
+const CLASS_CATEGORIES = ["TSS", "GE"];
+
+// POST /api/classes — always created in the current academic year. Classes
+// for a past year are never created after the fact; they only get read
+// back when a manager switches to view that year.
 const createClass = asyncHandler(async (req, res) => {
-  const { name, academicYearId } = req.body;
+  const { name, academicYearId, category } = req.body;
   if (!name || !academicYearId) {
     throw ApiError.badRequest("name and academicYearId are required");
+  }
+  if (category && !CLASS_CATEGORIES.includes(category)) {
+    throw ApiError.badRequest("category must be either TSS or GE");
   }
 
   const year = await AcademicYear.findOne({
     where: { id: academicYearId, schoolId: req.schoolId },
   });
   if (!year) throw ApiError.badRequest("Invalid academicYearId for this school");
+  await assertCurrentYear(academicYearId, req.schoolId);
 
-  const klass = await Class.create({ schoolId: req.schoolId, academicYearId, name });
+  const klass = await Class.create({
+    schoolId: req.schoolId,
+    academicYearId,
+    name,
+    category: category || "GE",
+  });
   res.status(201).json({ class: klass });
 });
 
-// GET /api/classes
+// PATCH /api/classes/:id/name — rename a class. Only the current year's
+// classes can be renamed (same rule as everything else that changes a
+// class), and a duplicate name within the same academic year is rejected
+// so two classes in one year can never end up with the same name.
+const setClassName = asyncHandler(async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) throw ApiError.badRequest("name is required", "name");
+
+  const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  if (!klass) throw ApiError.notFound("Class not found");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
+
+  const trimmed = name.trim();
+  if (trimmed !== klass.name) {
+    const duplicate = await Class.findOne({
+      where: { schoolId: req.schoolId, academicYearId: klass.academicYearId, name: trimmed },
+    });
+    if (duplicate && duplicate.id !== klass.id) {
+      throw ApiError.conflict(
+        `A class named "${trimmed}" already exists in this academic year.`,
+        "DUPLICATE_CLASS_NAME"
+      );
+    }
+  }
+
+  klass.name = trimmed;
+  await klass.save();
+
+  res.json({ class: klass });
+});
+
+// PATCH /api/classes/:id/category — change a class's TSS/GE track after creation
+const setClassCategory = asyncHandler(async (req, res) => {
+  const { category } = req.body;
+  if (!CLASS_CATEGORIES.includes(category)) {
+    throw ApiError.badRequest("category must be either TSS or GE");
+  }
+
+  const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  if (!klass) throw ApiError.notFound("Class not found");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
+
+  klass.category = category;
+  await klass.save();
+
+  res.json({ class: klass });
+});
+
+// GET /api/classes?academicYearId= — scoped to one academic year at a time,
+// same as the rest of the app. Defaults to the current year so nothing
+// changes for teachers or for existing manager flows. Pass a past year's id
+// (manager only) to browse that year's classes read-only; pass ?all=true
+// (manager only) to skip year-scoping entirely, e.g. for cross-year admin
+// views.
 const listClasses = asyncHandler(async (req, res) => {
+  const wantsAll = req.query.all === "true";
+  if (wantsAll && req.user.role !== "manager") {
+    throw ApiError.forbidden("Only a school manager can view classes across all academic years");
+  }
+
+  const where = { schoolId: req.schoolId };
+  if (!wantsAll) {
+    let academicYearId = req.query.academicYearId;
+    if (academicYearId && req.user.role !== "manager") {
+      throw ApiError.forbidden("Only a school manager can view a past academic year");
+    }
+    if (!academicYearId) {
+      const currentYear = await getCurrentAcademicYear(req.schoolId);
+      academicYearId = currentYear ? currentYear.id : null;
+    }
+    // No current year set yet (fresh school) — fall through to an empty list
+    // rather than accidentally returning every class ever created.
+    where.academicYearId = academicYearId || 0;
+  }
+
   const classes = await Class.findAll({
-    where: { schoolId: req.schoolId },
+    where,
     include: [
       { model: User, as: "classTeacher", attributes: ["id", "name", "email"] },
       AcademicYear,
@@ -75,6 +163,7 @@ const getClass = asyncHandler(async (req, res) => {
 const deleteClass = asyncHandler(async (req, res) => {
   const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
   if (!klass) throw ApiError.notFound("Class not found");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
 
   const [studentCount, markCount] = await Promise.all([
     Student.count({ where: { classId: klass.id } }),
@@ -113,6 +202,7 @@ const setClassSuspended = asyncHandler(async (req, res) => {
 
   const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
   if (!klass) throw ApiError.notFound("Class not found");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
 
   klass.isSuspended = suspended;
   await klass.save();
@@ -130,6 +220,7 @@ const setClassModules = asyncHandler(async (req, res) => {
 
   const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
   if (!klass) throw ApiError.notFound("Class not found");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
 
   if (moduleIds.length > 0) {
     const modules = await Module.findAll({ where: { id: moduleIds, schoolId: req.schoolId } });
@@ -169,6 +260,7 @@ const assignClassTeacher = asyncHandler(async (req, res) => {
 
   const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
   if (!klass) throw ApiError.notFound("Class not found");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
 
   if (teacherId === null || teacherId === undefined) {
     klass.classTeacherId = null;
@@ -262,6 +354,8 @@ module.exports = {
   getClass,
   deleteClass,
   setClassSuspended,
+  setClassCategory,
+  setClassName,
   setClassModules,
   assignClassTeacher,
   getIncompleteMarks,

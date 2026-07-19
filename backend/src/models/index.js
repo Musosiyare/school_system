@@ -7,10 +7,12 @@ const Module = require("./Module");
 const ClassModule = require("./ClassModule");
 const TeacherModuleAssignment = require("./TeacherModuleAssignment");
 const Student = require("./Student");
+const StudentEnrollment = require("./StudentEnrollment");
 const Term = require("./Term");
 const Mark = require("./Mark");
 const ReportRemark = require("./ReportRemark");
 const Notification = require("./Notification");
+const SystemSetting = require("./SystemSetting");
 
 // School -> Users, AcademicYears, Classes, Modules, Students
 School.hasMany(User, { foreignKey: "schoolId" });
@@ -71,6 +73,18 @@ Mark.belongsTo(Term, { foreignKey: "termId" });
 Class.hasMany(Mark, { foreignKey: "classId" });
 Mark.belongsTo(Class, { foreignKey: "classId" });
 
+// Student enrollments — one row per student per academic year, recording
+// which class they belonged to that year. Source of truth for historical
+// rosters/reports; Student.classId remains the live/current pointer.
+Student.hasMany(StudentEnrollment, { foreignKey: "studentId" });
+StudentEnrollment.belongsTo(Student, { foreignKey: "studentId" });
+
+Class.hasMany(StudentEnrollment, { foreignKey: "classId" });
+StudentEnrollment.belongsTo(Class, { foreignKey: "classId" });
+
+AcademicYear.hasMany(StudentEnrollment, { foreignKey: "academicYearId" });
+StudentEnrollment.belongsTo(AcademicYear, { foreignKey: "academicYearId" });
+
 // Report remarks
 Student.hasMany(ReportRemark, { foreignKey: "studentId" });
 ReportRemark.belongsTo(Student, { foreignKey: "studentId" });
@@ -105,8 +119,10 @@ module.exports = {
   ClassModule,
   TeacherModuleAssignment,
   Student,
+  StudentEnrollment,
   Term,
   Mark,
   ReportRemark,
   Notification,
+  SystemSetting,
 };

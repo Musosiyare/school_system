@@ -9,6 +9,14 @@ Class.init(
     schoolId: { type: DataTypes.INTEGER, allowNull: false },
     academicYearId: { type: DataTypes.INTEGER, allowNull: false },
     name: { type: DataTypes.STRING, allowNull: false }, // e.g. "S1A"
+    // Which education track this class belongs to — Technical Secondary
+    // School or General Education. Shown next to the class name on report
+    // cards and the student list PDF so it's clear which track a class is on.
+    category: {
+      type: DataTypes.ENUM("TSS", "GE"),
+      allowNull: false,
+      defaultValue: "GE",
+    },
     classTeacherId: { type: DataTypes.INTEGER, allowNull: true },
     // A suspended class is frozen for teachers — hidden from their class
     // pickers, and any direct attempt to read/write its data (marks,

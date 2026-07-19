@@ -5,6 +5,8 @@ import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import Pagination from "../../components/ui/Pagination";
+import ArchivedYearBanner from "../../components/ArchivedYearBanner";
+import { useYear } from "../../context/YearContext";
 import { usePagination } from "../../hooks/usePagination";
 import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
@@ -12,11 +14,12 @@ import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
-import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays, Trash2, PauseCircle, PlayCircle } from "lucide-react";
+import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays, Trash2, PauseCircle, PlayCircle, GraduationCap, Pencil, Check, X } from "lucide-react";
 
 export default function Classes() {
   const confirm = useConfirm();
   const notify = useNotify();
+  const { viewingYearId, isCurrentView } = useYear();
   const [classes, setClasses] = useState([]);
   const [years, setYears] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -25,6 +28,7 @@ export default function Classes() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [academicYearId, setAcademicYearId] = useState("");
+  const [category, setCategory] = useState("GE");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -33,16 +37,25 @@ export default function Classes() {
   const [selectedModuleIds, setSelectedModuleIds] = useState([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [initialTeacherId, setInitialTeacherId] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("GE");
+  const [initialCategory, setInitialCategory] = useState("GE");
   const [manageError, setManageError] = useState("");
   const [manageSuccess, setManageSuccess] = useState("");
   const [savingManage, setSavingManage] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [suspending, setSuspending] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [query, setQuery] = useState("");
 
   async function loadAll() {
+    if (!viewingYearId) return;
     const [classesRes, yearsRes, teachersRes, assignmentsRes] = await Promise.all([
-      api.get("/classes"),
+      api.get("/classes", { params: { academicYearId: viewingYearId } }),
+      // The "New Class" form always creates in the current year, regardless
+      // of which year is being viewed — this stays unfiltered on purpose.
       api.get("/academic-years"),
       api.get("/teachers"),
       api.get("/assignments"),
@@ -55,10 +68,12 @@ export default function Classes() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingYearId]);
 
   function openCreate() {
     setName("");
+    setCategory("GE");
     // Only the current academic year is ever offered here, so pre-select it
     // when there is one instead of making the manager pick from a list of one.
     setAcademicYearId(years[0] ? String(years[0].id) : "");
@@ -71,7 +86,7 @@ export default function Classes() {
     setError("");
     setSaving(true);
     try {
-      await api.post("/classes", { name, academicYearId: Number(academicYearId) });
+      await api.post("/classes", { name, academicYearId: Number(academicYearId), category });
       setCreating(false);
       await loadAll();
     } catch (err) {
@@ -87,8 +102,14 @@ export default function Classes() {
     const teacherId = klass.classTeacher?.id ? String(klass.classTeacher.id) : "";
     setSelectedTeacherId(teacherId);
     setInitialTeacherId(teacherId);
+    const cat = klass.category || "GE";
+    setSelectedCategory(cat);
+    setInitialCategory(cat);
     setManageError("");
     setManageSuccess("");
+    setEditingName(false);
+    setNameDraft(klass.name);
+    setNameError("");
   }
 
   // Only this class's own modules — not the full school catalog. Adding a
@@ -109,19 +130,30 @@ export default function Classes() {
     setManageError("");
     setManageSuccess("");
 
-    if (selectedTeacherId === initialTeacherId) {
+    const teacherChanged = selectedTeacherId !== initialTeacherId;
+    const categoryChanged = selectedCategory !== initialCategory;
+
+    if (!teacherChanged && !categoryChanged) {
       setManageSuccess("No changes to save.");
+      setTimeout(() => setManageSuccess(""), 2000);
       return;
     }
 
     setSavingManage(true);
     try {
-      await api.post(`/classes/${managing.id}/assign-teacher`, {
-        teacherId: selectedTeacherId ? Number(selectedTeacherId) : null,
-      });
+      if (teacherChanged) {
+        await api.post(`/classes/${managing.id}/assign-teacher`, {
+          teacherId: selectedTeacherId ? Number(selectedTeacherId) : null,
+        });
+      }
+      if (categoryChanged) {
+        await api.patch(`/classes/${managing.id}/category`, { category: selectedCategory });
+      }
       await loadAll();
       setInitialTeacherId(selectedTeacherId);
+      setInitialCategory(selectedCategory);
       setManageSuccess("Saved.");
+      setTimeout(() => setManageSuccess(""), 2000);
     } catch (err) {
       setManageError(err.message);
     } finally {
@@ -180,10 +212,33 @@ export default function Classes() {
     }
   }
 
+  async function handleSaveName() {
+    setNameError("");
+    if (!nameDraft.trim()) {
+      setNameError("Class name is required.");
+      return;
+    }
+    if (nameDraft.trim() === managing.name) {
+      setEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      const { data } = await api.patch(`/classes/${managing.id}/name`, { name: nameDraft.trim() });
+      setManaging(data.class);
+      setEditingName(false);
+      await loadAll();
+    } catch (err) {
+      setNameError(err.message);
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   const filteredClasses = classes.filter((c) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    return [c.name, c.AcademicYear?.name, c.classTeacher?.name]
+    return [c.name, c.category, c.AcademicYear?.name, c.classTeacher?.name]
       .filter(Boolean)
       .some((field) => field.toLowerCase().includes(q));
   });
@@ -193,10 +248,13 @@ export default function Classes() {
 
   return (
     <div>
+      <ArchivedYearBanner />
       <div className="flex justify-end mb-6">
-        <Button onClick={openCreate}>
-          <Plus size={16} /> New Class
-        </Button>
+        {isCurrentView && (
+          <Button onClick={openCreate}>
+            <Plus size={16} /> New Class
+          </Button>
+        )}
       </div>
 
       <Card
@@ -215,6 +273,7 @@ export default function Classes() {
           <Thead>
             <tr>
               <Th>Name</Th>
+              <Th>Category</Th>
               <Th>Academic Year</Th>
               <Th>Class Teacher</Th>
               <Th>Modules</Th>
@@ -223,7 +282,7 @@ export default function Classes() {
           </Thead>
           <tbody>
             {classes.length === 0 && (
-              <EmptyRow colSpan={5}>
+              <EmptyRow colSpan={6}>
                 <div className="flex flex-col items-center gap-2 py-2">
                   <Layers size={22} className="text-slate-300" />
                   No classes yet. Click "New Class" to create one.
@@ -231,7 +290,7 @@ export default function Classes() {
               </EmptyRow>
             )}
             {classes.length > 0 && filteredClasses.length === 0 && (
-              <EmptyRow colSpan={5}>No classes match "{query}".</EmptyRow>
+              <EmptyRow colSpan={6}>No classes match "{query}".</EmptyRow>
             )}
             {pagedClasses.map((c) => (
               <tr key={c.id}>
@@ -240,6 +299,9 @@ export default function Classes() {
                     {c.name}
                     {c.isSuspended && <Badge tone="warning">Suspended</Badge>}
                   </div>
+                </Td>
+                <Td>
+                  <Badge tone={c.category === "TSS" ? "teal" : "orange"}>{c.category || "GE"}</Badge>
                 </Td>
                 <Td className="text-slate-500">{c.AcademicYear?.name || "-"}</Td>
                 <Td>
@@ -294,8 +356,15 @@ export default function Classes() {
         }
       >
         <form noValidate onSubmit={handleCreateClass} className="space-y-4">
-          <Field label="Class Name (e.g. S2A)">
-            <IconInput icon={Layers} value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+          <Field label="Class Name">
+            <IconInput
+              icon={Layers}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. S2A"
+              required
+              autoFocus
+            />
           </Field>
           <Field label="Academic Year">
             <IconSelect icon={CalendarDays} value={academicYearId} onChange={(e) => setAcademicYearId(e.target.value)} required>
@@ -305,6 +374,12 @@ export default function Classes() {
                   {y.name}
                 </option>
               ))}
+            </IconSelect>
+          </Field>
+          <Field label="Class Category">
+            <IconSelect icon={GraduationCap} value={category} onChange={(e) => setCategory(e.target.value)} required>
+              <option value="GE">General Education (GE)</option>
+              <option value="TSS">Technical Secondary School (TSS)</option>
             </IconSelect>
           </Field>
           {years.length === 0 && (
@@ -332,19 +407,104 @@ export default function Classes() {
             <Button variant="ghost" onClick={() => setManaging(null)}>
               Close
             </Button>
-            <Button onClick={handleSaveManage} disabled={savingManage}>
-              {savingManage ? "Saving..." : "Save Changes"}
-            </Button>
+            {isCurrentView && (
+              <Button onClick={handleSaveManage} disabled={savingManage}>
+                {savingManage ? "Saving..." : "Save Changes"}
+              </Button>
+            )}
           </>
         }
       >
         <div className="space-y-5">
+          {isCurrentView && (
+            <div className="pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setNameDraft(managing.name);
+                    setNameError("");
+                    setEditingName((v) => !v);
+                  }}
+                  title="Edit class name"
+                  aria-label="Edit class name"
+                >
+                  <Pencil size={14} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={managing?.isSuspended ? "teal" : "amber"}
+                  onClick={handleToggleSuspend}
+                  disabled={suspending}
+                  title={managing?.isSuspended ? "Unsuspend this class" : "Suspend this class"}
+                  aria-label={managing?.isSuspended ? "Unsuspend this class" : "Suspend this class"}
+                >
+                  {managing?.isSuspended ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={handleDeleteClass}
+                  disabled={deleting}
+                  title="Delete this class"
+                  aria-label="Delete this class"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+
+              {editingName && (
+                <div className="flex items-start gap-2 mt-3">
+                  <div className="flex-1 max-w-xs">
+                    <IconInput
+                      icon={Layers}
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      autoFocus
+                    />
+                    <ErrorText>{nameError}</ErrorText>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveName}
+                    disabled={savingName}
+                    title="Save name"
+                    aria-label="Save name"
+                  >
+                    <Check size={14} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingName(false)}
+                    title="Cancel"
+                    aria-label="Cancel"
+                  >
+                    <X size={14} />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-2">Class Category</p>
+            <p className="text-xs text-slate-400 mb-2">
+              Which education track this class belongs to. Shown on report cards.
+            </p>
+            <IconSelect icon={GraduationCap} value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} disabled={!isCurrentView}>
+              <option value="GE">General Education (GE)</option>
+              <option value="TSS">Technical Secondary School (TSS)</option>
+            </IconSelect>
+          </div>
+
           <div>
             <p className="text-sm font-medium text-slate-700 mb-2">Class Teacher</p>
             <p className="text-xs text-slate-400 mb-2">
               Manages this class's reports. Doesn't have to teach here themselves.
             </p>
-            <IconSelect icon={UserCircle2} value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)}>
+            <IconSelect icon={UserCircle2} value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} disabled={!isCurrentView}>
               <option value="">Unassigned</option>
               {teachers.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -399,27 +559,6 @@ export default function Classes() {
 
           <ErrorText>{manageError}</ErrorText>
           <SuccessText>{manageSuccess}</SuccessText>
-
-          <div className="pt-4 border-t border-slate-100">
-            <p className="text-sm font-medium text-slate-700 mb-1">Class Actions</p>
-            <p className="text-xs text-slate-400 mb-3">
-              Suspending hides this class from teachers everywhere without touching any data. Deleting is
-              only allowed if this class has no students and no marks recorded.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant={managing?.isSuspended ? "teal" : "amber"} onClick={handleToggleSuspend} disabled={suspending}>
-                {managing?.isSuspended ? <PlayCircle size={15} /> : <PauseCircle size={15} />}
-                {suspending
-                  ? "Updating..."
-                  : managing?.isSuspended
-                  ? "Unsuspend This Class"
-                  : "Suspend This Class"}
-              </Button>
-              <Button variant="danger" onClick={handleDeleteClass} disabled={deleting}>
-                <Trash2 size={15} /> {deleting ? "Deleting..." : "Delete This Class"}
-              </Button>
-            </div>
-          </div>
         </div>
       </Modal>
 

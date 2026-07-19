@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { YearProvider } from "./context/YearContext";
+import { MaintenanceProvider } from "./context/MaintenanceContext";
 import { ConfirmProvider } from "./components/ui/ConfirmProvider";
 import { NotifyProvider } from "./components/ui/NotifyProvider";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -32,7 +34,9 @@ import TeacherProfile from "./pages/teacher/TeacherProfile";
 
 export default function App() {
   return (
+    <MaintenanceProvider>
     <AuthProvider>
+      <YearProvider>
       <ConfirmProvider>
       <NotifyProvider>
       <BrowserRouter>
@@ -189,6 +193,8 @@ export default function App() {
       </BrowserRouter>
       </NotifyProvider>
       </ConfirmProvider>
+      </YearProvider>
     </AuthProvider>
+    </MaintenanceProvider>
   );
 }

@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useMaintenance } from "../context/MaintenanceContext";
 import { useConfirm } from "./ui/ConfirmProvider";
 import NotificationBell from "./NotificationBell";
+import YearSwitcher from "./YearSwitcher";
+import MaintenanceScreen from "./MaintenanceScreen";
+import MaintenanceBanner from "./MaintenanceBanner";
 import {
   School,
   LayoutDashboard,
@@ -22,6 +26,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Wrench,
 } from "lucide-react";
 
 const ROLE_META = {
@@ -74,7 +79,7 @@ const PAGE_META = {
     subtitle: "Each year auto-creates its three terms.",
     icon: CalendarRange,
   },
-  "/manager/classes": { title: "Classes", subtitle: "Classes for the current academic year.", icon: Layers },
+  "/manager/classes": { title: "Classes", subtitle: "Classes for the year you're viewing.", icon: Layers },
   "/manager/modules": { title: "Modules", subtitle: "Your school's subject catalog.", icon: BookOpen },
   "/manager/teachers": { title: "Teachers", subtitle: "Teacher accounts in your school.", icon: Users },
   "/manager/students": { title: "Students", subtitle: "Pick a class to manage its students.", icon: GraduationCap },
@@ -107,6 +112,7 @@ const PAGE_META = {
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
+  const { maintenanceMode, scheduledAt } = useMaintenance();
   const navigate = useNavigate();
   const location = useLocation();
   const confirm = useConfirm();
@@ -128,6 +134,13 @@ export default function Layout({ children }) {
     return <div className="min-h-screen bg-slate-50">{children}</div>;
   }
 
+  // Superuser is exempt (they're the one who needs to get in to turn it back
+  // off). Everyone else sees the full-page maintenance notice instead of the
+  // app, until it's switched off.
+  if (user.role !== "superuser" && maintenanceMode) {
+    return <MaintenanceScreen />;
+  }
+
   const meta = ROLE_META[user.role];
   const navItems = NAV[user.role] || [];
   const pageMeta = PAGE_META[location.pathname] || {};
@@ -136,6 +149,17 @@ export default function Layout({ children }) {
   const PageIcon = pageMeta.icon;
 
   async function handleLogout() {
+    if (maintenanceMode) {
+      const goToSettings = await confirm({
+        title: "Turn off maintenance mode first",
+        message:
+          "Logging out is blocked while maintenance mode is on, so you don't get locked out again. Turn maintenance mode off, then you can log out normally.",
+        confirmText: "Go to maintenance settings",
+        cancelText: "Close",
+      });
+      if (goToSettings) navigate("/superuser");
+      return;
+    }
     const ok = await confirm({
       title: "Log out?",
       message: "You'll need to log in again to access your account.",
@@ -275,13 +299,23 @@ export default function Layout({ children }) {
           )}
 
           <div className="min-w-0 flex-1">
-            <h1 className="text-base sm:text-lg font-semibold text-slate-800 truncate">
-              {pageTitle}
-            </h1>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold text-slate-800 truncate">
+                {pageTitle}
+              </h1>
+              {(maintenanceMode || scheduledAt) && (
+                <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[11px] font-semibold">
+                  <Wrench size={11} className="shrink-0" />
+                  {maintenanceMode ? "Maintenance ON" : "Maintenance planned"}
+                </span>
+              )}
+            </div>
             {pageMeta.subtitle && (
               <p className="hidden sm:block text-xs text-slate-500 truncate">{pageMeta.subtitle}</p>
             )}
           </div>
+
+          {user.role === "manager" && <YearSwitcher />}
 
           {(user.role === "teacher" || user.role === "manager") && <NotificationBell />}
 
@@ -295,6 +329,8 @@ export default function Layout({ children }) {
             })}
           </div>
         </header>
+
+        <MaintenanceBanner />
 
         <main className="flex-1 min-w-0">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">{children}</div>

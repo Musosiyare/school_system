@@ -4,11 +4,101 @@ import { useAuth } from "../../context/AuthContext";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
-import { Field, Select, Input } from "../../components/ui/FormField";
+import { Field, Input } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload } from "lucide-react";
+import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, ChevronDown } from "lucide-react";
+
+// Custom dropdown for the Module/Class picker. A native <select> can't color
+// part of an option's text and leave the rest black — the whole <option> is
+// one color or none. Since we want the module/class name to always stay
+// black and only the "Missing marks / Completed" status to be colored
+// (red/green), this renders its own list so each option can mix a black
+// segment and a colored segment.
+function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const current = assignments.find((a) => String(a.id) === value);
+  const currentStatus = current ? assignmentStatuses[current.id] : null;
+
+  function statusLabel(status) {
+    if (!status) return null;
+    return status.completed
+      ? "✓ Marks completed"
+      : `⚠ Missing marks (${status.totalStudents - status.recordedCount}/${status.totalStudents})`;
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="form-field w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-left outline-none transition focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100 flex items-center justify-between gap-2 min-h-[2.75rem]"
+      >
+        {current ? (
+          <span className="flex flex-col min-w-0 flex-1">
+            <span className="text-slate-800 truncate min-w-0 block">
+              {current.Module?.moduleTitle} — {current.Class?.name}
+            </span>
+            {currentStatus && (
+              <span
+                className="text-xs font-medium mt-0.5 truncate block"
+                style={{ color: currentStatus.completed ? "#059669" : "#dc2626" }}
+              >
+                {statusLabel(currentStatus)}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="text-slate-400">Select assignment</span>
+        )}
+        <ChevronDown size={16} className="shrink-0 text-slate-400" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg py-1">
+          {assignments.map((a) => {
+            const status = assignmentStatuses[a.id];
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => {
+                  onChange(String(a.id));
+                  setOpen(false);
+                }}
+                className={`w-full flex flex-col text-left px-3.5 py-2 text-sm hover:bg-slate-50 ${
+                  String(a.id) === value ? "bg-brand-50" : ""
+                }`}
+              >
+                <span className="text-slate-800 truncate block">
+                  {a.Module?.moduleTitle} — {a.Class?.name}
+                </span>
+                {status && (
+                  <span
+                    className="text-xs font-medium mt-0.5 truncate block"
+                    style={{ color: status.completed ? "#059669" : "#dc2626" }}
+                  >
+                    {statusLabel(status)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function MarksEntry() {
   const { user } = useAuth();
@@ -42,6 +132,13 @@ export default function MarksEntry() {
   const [importing, setImporting] = useState(false);
   const [importWarnings, setImportWarnings] = useState([]);
 
+  // assignmentId -> { totalStudents, recordedCount, completed } for the
+  // currently selected term. Powers the "Missing marks / Completed" status
+  // shown next to each module in the Module/Class picker, so a teacher can
+  // tell at a glance which modules still need marks without having to open
+  // each one first.
+  const [assignmentStatuses, setAssignmentStatuses] = useState({});
+
   // Success messages ("Saved...", "Imported...") are transient confirmations,
   // not something that needs to stay on screen — clear it automatically a
   // couple seconds after it appears.
@@ -59,6 +156,12 @@ export default function MarksEntry() {
       ]);
       setAssignments(assignmentsRes.data.assignments);
       setYears(yearsRes.data.academicYears);
+      // Default to the first term of the current academic year so the
+      // "missing marks / completed" status on each module can be checked
+      // against a real term right away, instead of staying blank until the
+      // teacher manually picks one.
+      const firstTerm = yearsRes.data.academicYears[0]?.Terms?.[0];
+      if (firstTerm) setSelectedTermId(String(firstTerm.id));
     })();
   }, [user.id]);
 
@@ -156,6 +259,67 @@ export default function MarksEntry() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAssignment, selectedTermId]);
 
+  // Marks-completion status for every one of this teacher's modules, for
+  // whichever term is selected — so the Module/Class picker can show
+  // "Missing marks" vs "Completed" next to each option instead of a teacher
+  // having to open a module to find out.
+  //
+  // Extracted into its own function (rather than living only inside the
+  // effect below) so it can also be called right after a save/import
+  // succeeds — otherwise the status would only ever refresh when the term
+  // selection changes, and a teacher who just recorded marks would still
+  // see the stale "Missing marks" count until they switched terms or
+  // reloaded the page.
+  async function refreshAssignmentStatuses(termId, isCancelled = () => false) {
+    if (!termId || assignments.length === 0) {
+      if (!isCancelled()) setAssignmentStatuses({});
+      return;
+    }
+    try {
+      const uniqueClassIds = [...new Set(assignments.map((a) => a.classId))];
+      const studentCountEntries = await Promise.all(
+        uniqueClassIds.map((classId) =>
+          api.get(`/classes/${classId}/students`).then((res) => [classId, res.data.students.length])
+        )
+      );
+      const studentCountByClass = Object.fromEntries(studentCountEntries);
+
+      const statusEntries = await Promise.all(
+        assignments.map((a) =>
+          api
+            .get("/marks", {
+              params: { classId: a.classId, moduleId: a.moduleId, termId },
+            })
+            .then((res) => {
+              const totalStudents = studentCountByClass[a.classId] || 0;
+              const recordedCount = res.data.marks.length;
+              return [
+                a.id,
+                {
+                  totalStudents,
+                  recordedCount,
+                  completed: totalStudents > 0 && recordedCount >= totalStudents,
+                },
+              ];
+            })
+        )
+      );
+      if (!isCancelled()) setAssignmentStatuses(Object.fromEntries(statusEntries));
+    } catch {
+      // Non-critical — worst case the status suffix just doesn't show.
+      if (!isCancelled()) setAssignmentStatuses({});
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshAssignmentStatuses(selectedTermId, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, selectedTermId]);
+
   // Live validation: a mark can never go below 0 or above the module's
   // weight (its max score). Values are clamped as the teacher types, and any
   // clamp is surfaced immediately next to the field.
@@ -239,6 +403,10 @@ export default function MarksEntry() {
       // Lock the fields again now that these marks are recorded — matches
       // the same protection a fresh page load would give.
       setEditMode(false);
+      // Keep the "Missing marks / Completed" status in the Module/Class
+      // picker in sync with what was just saved, instead of leaving it
+      // showing the stale pre-save count until the term selection changes.
+      refreshAssignmentStatuses(selectedTermId);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -336,6 +504,9 @@ export default function MarksEntry() {
       setEditMode(false);
       setSuccess(`Imported ${data.imported} score(s) from the file.`);
       if (data.warnings?.length) setImportWarnings(data.warnings);
+      // Same reason as in handleSubmit: keep the picker's status badge from
+      // going stale after marks change.
+      refreshAssignmentStatuses(selectedTermId);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -347,15 +518,18 @@ export default function MarksEntry() {
     <div>
       <Card>
         <div className="flex items-end gap-4 flex-wrap">
-          <Field label="Module / Class" className="min-w-[220px]">
-            <Select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)}>
-              <option value="">Select assignment</option>
-              {assignments.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.Module?.moduleTitle} — {a.Class?.name}
-                </option>
-              ))}
-            </Select>
+          <Field label="Module / Class" className="min-w-[260px] flex-1 sm:min-w-[380px] sm:max-w-[480px]">
+            <AssignmentSelect
+              assignments={assignments}
+              assignmentStatuses={assignmentStatuses}
+              value={selectedAssignment}
+              onChange={setSelectedAssignment}
+            />
+            {selectedTermId && (
+              <span className="text-xs text-slate-400">
+                Status shown is for the selected term below.
+              </span>
+            )}
           </Field>
           <Field
             label={

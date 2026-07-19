@@ -50,12 +50,13 @@ export default function ChangePassword() {
         </div>
 
         <form noValidate onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
-          <Field label="New Password (min 8 characters)">
+          <Field label="New Password">
             <IconInput
               icon={Lock}
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 8 characters"
               minLength={8}
               required
               autoFocus

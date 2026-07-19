@@ -4,6 +4,15 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:4000/api",
 });
 
+// A logged-in manager/teacher session can be cut off by maintenance mode
+// turning on mid-session — any protected call can come back 503
+// MAINTENANCE_MODE at any time. MaintenanceProvider registers a handler here
+// on mount so this plain module (outside the React tree) can notify it.
+let maintenanceHandler = null;
+export function setMaintenanceHandler(fn) {
+  maintenanceHandler = fn;
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -15,6 +24,10 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const apiError = err.response?.data?.error;
+
+    if (apiError?.code === "MAINTENANCE_MODE" && maintenanceHandler) {
+      maintenanceHandler(apiError.message);
+    }
 
     // A 401 here means the session is no longer valid (expired, or ended by
     // logout elsewhere). Clear local state and bounce to login rather than

@@ -81,13 +81,14 @@ export default function ResetPassword() {
           </div>
         ) : (
           <form noValidate onSubmit={handleSubmit} className={`${cardWrap} space-y-4`}>
-            <Field label="New Password (min 8 characters)">
+            <Field label="New Password">
               <div className="relative">
                 <Lock size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-400" />
                 <input
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="At least 8 characters"
                   minLength={8}
                   required
                   autoFocus

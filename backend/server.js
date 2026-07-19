@@ -18,6 +18,8 @@ const markRoutes = require("./src/routes/markRoutes");
 const termRoutes = require("./src/routes/termRoutes");
 const notificationRoutes = require("./src/routes/notificationRoutes");
 const statisticsRoutes = require("./src/routes/statisticsRoutes");
+const settingsRoutes = require("./src/routes/settingsRoutes");
+const { getSettingsRow } = require("./src/controllers/settingsController");
 const errorHandler = require("./src/middleware/errorHandler");
 
 const app = express();
@@ -39,6 +41,7 @@ app.use("/api/marks", markRoutes);
 app.use("/api/terms", termRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/statistics", statisticsRoutes);
+app.use("/api/settings", settingsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -67,6 +70,16 @@ async function start() {
     console.log(shouldAlter ? "Models synced (alter)." : "Models synced.");
 
     app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+    // getSettingsRow() expires a due schedule as a side effect (see
+    // settingsController.expireSchedule) — it's a notification only and
+    // never turns maintenance mode on by itself. Requests already trigger
+    // this naturally, but a quiet system with no traffic could otherwise
+    // keep showing a stale "upcoming maintenance" notice past its time —
+    // this backstop keeps the delay to ~20s regardless.
+    setInterval(() => {
+      getSettingsRow().catch((err) => console.error("Scheduled maintenance check failed:", err.message));
+    }, 20000);
   } catch (err) {
     console.error("Failed to start server:", err);
     process.exit(1);

@@ -6,6 +6,8 @@ const TONES = {
   superuser: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
   manager: "bg-brand-50 text-brand-600 ring-1 ring-brand-200",
   teacher: "bg-brand-50 text-brand-600 ring-1 ring-brand-200",
+  teal: "bg-teal-50 text-teal-700 ring-1 ring-teal-200",
+  orange: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
 };
 
 export default function Badge({ children, tone = "neutral", className = "" }) {

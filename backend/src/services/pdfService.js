@@ -21,6 +21,15 @@ const BRAND_BLUE = "#000000";
 const BRAND_BLUE_LIGHT = "#ffffff";
 const PANEL_GREY = "#ffffff";
 const BORDER_GREY = "#000000";
+// Used only for the "MID-TERM REPORT CARD" / term heading — the one spot on
+// the report card that's intentionally colored (navy blue, bold). Everything
+// else on the card stays black-and-white so it still prints cleanly on B&W
+// printers.
+const TITLE_COLOR = "#0a2f5c";
+// Used only for the "ACADEMIC PERFORMANCE" section label (navy blue, bold) —
+// same navy blue as TITLE_COLOR. Other section labels (e.g. SIGNATURES) stay
+// black via sectionLabel()'s default.
+const SECTION_TITLE_COLOR = "#0a2f5c";
 
 // Every section below uses this same layout: solid black grid lines, no
 // fills, no color — a plain black-and-white bordered table.
@@ -49,11 +58,11 @@ const plainLayout = {
 // A short blue bar used as a section label (mirrors the light-blue
 // "Academic Performance" / "Comments and Summary" / "Signatures" strips in
 // the template).
-function sectionLabel(text) {
+function sectionLabel(text, color, fontSize) {
   return {
     table: {
       widths: ["*"],
-      body: [[{ text, bold: true, fontSize: 10, color: BRAND_BLUE }]],
+      body: [[{ text, bold: true, fontSize: fontSize || 10, color: color || BRAND_BLUE }]],
     },
     layout: {
       hLineWidth: () => 0,
@@ -112,17 +121,45 @@ function overallGradeColor(weightedAverage) {
 // banner — title, term, school, student fields — uses the same font
 // size so nothing is visually "bigger" than anything else. ----------
 const HEADER_FONT_SIZE = 12;
+// The "MID-TERM REPORT CARD" title itself is intentionally bigger than the
+// rest of the banner (term, school name, student fields) so it stands out
+// as the page heading. The term line underneath it is bumped slightly too.
+const TITLE_FONT_SIZE = 16;
+const TERM_FONT_SIZE = 13;
 
-function letterhead(schoolName, schoolAddress, termName, admissionNumber, report, className, schoolEmail, schoolPhone) {
+// Appends the class's education track — TSS (Technical Secondary School) or
+// GE (General Education) — next to its name, e.g. "S1A (TSS)". Falls back
+// to just the class name if no category is known (e.g. older records).
+function classLabel(className, classCategory) {
+  const name = className || "-";
+  if (classCategory !== "TSS" && classCategory !== "GE") return name;
+  return `${name} (${classCategory})`;
+}
+
+// Full track name shown ahead of the report card title, e.g.
+// "TECHNICAL SECONDARY SCHOOL / MID-TERM REPORT CARD". Omitted entirely
+// when the category isn't known.
+function categoryFullName(classCategory) {
+  if (classCategory === "TSS") return "TECHNICAL SECONDARY SCHOOL";
+  if (classCategory === "GE") return "GENERAL EDUCATION";
+  return null;
+}
+
+function reportCardTitle(classCategory) {
+  const prefix = categoryFullName(classCategory);
+  return prefix ? `${prefix} / MID-TERM REPORT CARD` : "MID-TERM REPORT CARD";
+}
+
+function letterhead(schoolName, schoolAddress, termName, admissionNumber, report, className, schoolEmail, schoolPhone, classCategory) {
   const contactLine = [schoolPhone, schoolEmail].filter(Boolean).join("  ·  ");
   return {
     stack: [
-      { text: "MID-TERM REPORT CARD", bold: true, fontSize: HEADER_FONT_SIZE, color: BLACK, alignment: "center" },
+      { text: reportCardTitle(classCategory ?? report.student?.classCategory), bold: true, fontSize: TITLE_FONT_SIZE, color: TITLE_COLOR, alignment: "center" },
       {
-        text: termName || "-",
+        text: report.academicYear ? `${termName || "-"} \u2014 ${report.academicYear}` : termName || "-",
         bold: true,
-        fontSize: HEADER_FONT_SIZE,
-        color: BLACK,
+        fontSize: TERM_FONT_SIZE,
+        color: TITLE_COLOR,
         alignment: "center",
         margin: [0, 2, 0, 8],
       },
@@ -167,7 +204,7 @@ function letterhead(schoolName, schoolAddress, termName, admissionNumber, report
                     alignment: "right",
                   },
                   {
-                    text: `Class: ${className || report.student?.class || "-"}`,
+                    text: `Class: ${classLabel(className || report.student?.class, classCategory ?? report.student?.classCategory)}`,
                     bold: true,
                     fontSize: HEADER_FONT_SIZE,
                     color: BLACK,
@@ -357,12 +394,40 @@ function summaryStrip(report) {
   };
 }
 
+// ---------- Student-info QR code: replaces the Parent/Guardian signature
+// slot. Encodes only school name, school phone, student name, student code,
+// class, marks (weighted average), and rank — as plain multi-line text so
+// any phone camera / QR app can read it directly, no app-specific format
+// required. ----------
+function studentInfoQrData(schoolName, schoolPhone, report, className, classCategory) {
+  const rankText =
+    report.classRank !== undefined && report.classRank !== null && report.classRankTotal
+      ? `${report.classRank} out of ${report.classRankTotal}`
+      : "N/A";
+  const marksText =
+    report.weightedAverage !== null && report.weightedAverage !== undefined
+      ? `${report.weightedAverage}%`
+      : "N/A";
+  const resolvedClassName = className || report.student?.class;
+  const lines = [
+    schoolName,
+    schoolPhone,
+    report.student?.name ? `Student: ${report.student.name}` : null,
+    report.student?.admissionNumber ? `Student Code: ${report.student.admissionNumber}` : null,
+    resolvedClassName ? `Class: ${classLabel(resolvedClassName, classCategory ?? report.student?.classCategory)}` : null,
+    `Marks: ${marksText}`,
+    `Rank: ${rankText}`,
+  ].filter(Boolean);
+  return lines.length ? lines.join("\n") : "Student Info";
+}
+
 // ---------- Signatures: no class teacher remarks (removed as unnecessary),
 // no date lines — the generated date lives in the page footer instead (see
-// docFooter below). Three signature lines — Class Teacher, School Manager,
-// Parent/Guardian — mirror the template's Teacher / Principal /
-// Parent-Guardian row. ----------
-function remarksAndSignatures(report, schoolManagerName) {
+// docFooter below). Class Teacher and School Manager keep their signature
+// lines; the third slot (previously Parent/Guardian) is now a QR code
+// encoding the student's info (school name, school phone, student name,
+// student code, class, marks, and rank). ----------
+function remarksAndSignatures(report, schoolManagerName, schoolName, schoolPhone, className, classCategory) {
   return {
     unbreakable: true,
     stack: [
@@ -384,12 +449,13 @@ function remarksAndSignatures(report, schoolManagerName) {
           {
             stack: [
               {
-                text: report.student?.guardianName || "Not assigned",
-                bold: true,
-                fontSize: 10,
+                qr: studentInfoQrData(schoolName, schoolPhone, report, className, classCategory),
+                fit: 100,
+                eccLevel: "M",
+                foreground: BLACK,
                 alignment: "right",
               },
-              { text: "PARENT/GUARDIAN", fontSize: 7, color: BLACK, alignment: "right", margin: [0, 1, 0, 0] },
+              { text: "STUDENT INFO", fontSize: 7, color: BLACK, alignment: "right", margin: [0, 3, 0, 0] },
             ],
           },
         ],
@@ -402,7 +468,7 @@ function remarksAndSignatures(report, schoolManagerName) {
 // INSIDE the bordered card content (not a pdfmake page `footer`, which
 // draws below the page margin and outside the outer border box). Matches
 // the frontend's report-card footer exactly. ----------
-function cardFooter(className) {
+function cardFooter(className, classCategory) {
   const generatedOn = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   return {
     table: {
@@ -411,7 +477,7 @@ function cardFooter(className) {
         [
           { text: `Generated: ${generatedOn}`, fontSize: 7.5, color: "#6b7280" },
           {
-            text: `Class: ${className || "-"}`,
+            text: `Class: ${classLabel(className, classCategory)}`,
             fontSize: 7.5,
             color: "#6b7280",
             alignment: "right",
@@ -468,15 +534,14 @@ function outerBorder(content) {
   };
 }
 
-// Watermark shows the FULL school name (no longer abbreviated to just the
-// first word). Mirrors watermarkText() in frontend/src/pages/Reports.jsx so
-// the on-screen/print watermark and the PDF watermark always show the same
-// text.
-function watermarkText(schoolName) {
-  return (schoolName || "School").trim().toUpperCase();
+// Watermark shows the class name (previously the school name) — mirrors
+// watermarkText() in frontend/src/pages/Reports.jsx so the on-screen/print
+// watermark and the PDF watermark always show the same text.
+function watermarkText(className) {
+  return (className || "Class").trim().toUpperCase();
 }
 
-// Faint diagonal school-name watermark, drawn ONCE (not tiled) and centered
+// Faint diagonal class-name watermark, drawn ONCE (not tiled) and centered
 // behind the report card content on every page. Returned as a pdfmake
 // `background` function so it's redrawn automatically on each physical page
 // (including every student's page in a full-class export). Very low
@@ -484,8 +549,8 @@ function watermarkText(schoolName) {
 // Mirrors the identical single diagonal watermark drawn in the on-screen/
 // print view — see the <svg className="report-watermark-svg"> in
 // frontend/src/pages/Reports.jsx.
-function diagonalWatermarkSvg(schoolName) {
-  const word = watermarkText(schoolName);
+function diagonalWatermarkSvg(className) {
+  const word = watermarkText(className);
   const svg = `
     <svg viewBox="0 0 640 900" xmlns="http://www.w3.org/2000/svg">
       <text x="320" y="450" font-size="52" font-weight="700" fill="#000000" fill-opacity="0.08" letter-spacing="2" text-anchor="middle" transform="rotate(-28 320 450)">${word}</text>
@@ -504,7 +569,7 @@ function diagonalWatermarkSvg(schoolName) {
   };
 }
 
-function reportCardContent(report, schoolName, schoolAddress, className, termName, schoolManagerName, schoolEmail, schoolPhone) {
+function reportCardContent(report, schoolName, schoolAddress, className, termName, schoolManagerName, schoolEmail, schoolPhone, classCategory) {
   return [
     outerBorder(
       [
@@ -516,14 +581,27 @@ function reportCardContent(report, schoolName, schoolAddress, className, termNam
           report,
           className,
           schoolEmail,
-          schoolPhone
+          schoolPhone,
+          classCategory
         ),
-        sectionLabel("ACADEMIC PERFORMANCE"),
+        sectionLabel("ACADEMIC PERFORMANCE", SECTION_TITLE_COLOR, 13),
         moduleTable(report.modules),
         naNote(report.modules),
         summaryStrip(report),
-        remarksAndSignatures(report, schoolManagerName),
-        cardFooter(className),
+        // Signatures + footer are wrapped together as ONE unbreakable unit.
+        // Previously the footer was a separate block right after signatures
+        // — when signatures just barely fit at the bottom of a page,
+        // pdfmake would push ONLY the small footer table onto a new page by
+        // itself, leaving it orphaned below an otherwise-finished card.
+        // Combining them means they now always move as a pair: either both
+        // fit on the current page, or both move to the next page together.
+        {
+          unbreakable: true,
+          stack: [
+            remarksAndSignatures(report, schoolManagerName, schoolName, schoolPhone, className, classCategory),
+            cardFooter(className, classCategory),
+          ],
+        },
       ].filter(Boolean)
     ),
   ];
@@ -542,7 +620,7 @@ function generateReportCardPdf(
 ) {
   const docDefinition = {
     pageMargins: [36, 36, 36, 36],
-    background: diagonalWatermarkSvg(schoolName),
+    background: diagonalWatermarkSvg(report.student.class),
     content: reportCardContent(
       report,
       schoolName,
@@ -551,7 +629,8 @@ function generateReportCardPdf(
       report.term,
       schoolManagerName,
       schoolEmail,
-      schoolPhone
+      schoolPhone,
+      report.student.classCategory
     ),
     defaultStyle: { font: "Roboto", fontSize: 10, color: BLACK },
   };
@@ -576,7 +655,8 @@ function generateClassReportPdf(
   schoolManagerName = null,
   schoolAddress = null,
   schoolEmail = null,
-  schoolPhone = null
+  schoolPhone = null,
+  classCategory = null
 ) {
   const content = [];
   reports.forEach((report, idx) => {
@@ -590,14 +670,15 @@ function generateClassReportPdf(
         report.term,
         schoolManagerName,
         schoolEmail,
-        schoolPhone
+        schoolPhone,
+        classCategory ?? report.student?.classCategory
       )
     );
   });
 
   const docDefinition = {
     pageMargins: [36, 36, 36, 36],
-    background: diagonalWatermarkSvg(schoolName),
+    background: diagonalWatermarkSvg(className),
     content,
     defaultStyle: { font: "Roboto", fontSize: 10, color: BLACK },
   };
@@ -853,7 +934,7 @@ function thinOuterBorder(content) {
 // report title, then class/teacher/contact details. No border here: the
 // only borders on this page are the single thin outer border around
 // everything, plus the student table's own thin grid further down.
-function studentListHeader(schoolName, className, classTeacherName, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
+function studentListHeader(schoolName, className, academicYearName, classTeacherName, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
   const infoRow = (leftText, rightText) => ({
     columns: [
       { text: leftText, fontSize: 9.5 },
@@ -874,7 +955,8 @@ function studentListHeader(schoolName, className, classTeacherName, schoolPhone,
         margin: [0, 3, 0, 10],
       },
       infoRow(`Class: ${className || "-"}`, `Generated: ${generatedAt}`),
-      infoRow(`Class Teacher: ${classTeacherName || "-"}`, schoolPhone ? `Phone: ${schoolPhone}` : ""),
+      infoRow(academicYearName ? `Academic Year: ${academicYearName}` : "", schoolPhone ? `Phone: ${schoolPhone}` : ""),
+      infoRow(`Class Teacher: ${classTeacherName || "-"}`, ""),
       infoRow(schoolEmail ? `Email: ${schoolEmail}` : "", schoolAddress ? `Location: ${schoolAddress}` : ""),
     ],
     margin: [0, 0, 0, 14],
@@ -928,7 +1010,7 @@ function studentListFooter(schoolName) {
 // the header/summary/footer sections are plain (no borders), and only the
 // student list itself is a thin-bordered black-grid table.
 function generateStudentListPdf(data, schoolName = "School Name") {
-  const { className, classTeacherName, schoolPhone, schoolEmail, schoolAddress, rows, generatedAt } = data;
+  const { className, academicYearName, classTeacherName, schoolPhone, schoolEmail, schoolAddress, rows, generatedAt } = data;
 
   const maleCount = rows.filter((r) => r.sex === "Male").length;
   const femaleCount = rows.filter((r) => r.sex === "Female").length;
@@ -977,7 +1059,7 @@ function generateStudentListPdf(data, schoolName = "School Name") {
     pageMargins: [36, 36, 36, 50],
     content: [
       thinOuterBorder([
-        studentListHeader(schoolName, className, classTeacherName, schoolPhone, schoolEmail, schoolAddress, generatedAt),
+        studentListHeader(schoolName, className, academicYearName, classTeacherName, schoolPhone, schoolEmail, schoolAddress, generatedAt),
         studentListSummary(rows.length, maleCount, femaleCount),
         studentTable,
         studentListFooter(schoolName),
@@ -1009,13 +1091,14 @@ module.exports = {
   generateMarksEvidencePdf,
   generateStudentListPdf,
   generateStudentRosterPdf,
+  generateSchoolNumbersReportPdf,
 };
 
 // Borderless header for the flexible roster PDF (generateStudentRosterPdf) —
 // same conventions as studentListHeader, but the class line becomes
 // "Whole School" for a school-wide export, and a gender-filter line is
 // always shown so it's obvious which subset of students this is.
-function studentRosterHeader(schoolName, scopeLabel, classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
+function studentRosterHeader(schoolName, scopeLabel, academicYearName, classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
   const infoRow = (leftText, rightText) => ({
     columns: [
       { text: leftText, fontSize: 9.5 },
@@ -1036,8 +1119,8 @@ function studentRosterHeader(schoolName, scopeLabel, classTeacherName, genderLab
         margin: [0, 3, 0, 10],
       },
       infoRow(scopeLabel, `Generated: ${generatedAt}`),
-      infoRow(`Filter: ${genderLabel}`, schoolPhone ? `Phone: ${schoolPhone}` : ""),
-      ...(classTeacherName ? [infoRow(`Class Teacher: ${classTeacherName}`, "")] : []),
+      infoRow(academicYearName ? `Academic Year: ${academicYearName}` : "", `Filter: ${genderLabel}`),
+      ...(classTeacherName ? [infoRow(`Class Teacher: ${classTeacherName}`, schoolPhone ? `Phone: ${schoolPhone}` : "")] : [infoRow(schoolPhone ? `Phone: ${schoolPhone}` : "", "")]),
       infoRow(schoolEmail ? `Email: ${schoolEmail}` : "", schoolAddress ? `Location: ${schoolAddress}` : ""),
     ],
     margin: [0, 0, 0, 14],
@@ -1052,7 +1135,7 @@ function studentRosterHeader(schoolName, scopeLabel, classTeacherName, genderLab
 // whole school, a Class column is added so each row still says where the
 // student belongs.
 function generateStudentRosterPdf(data, schoolName = "School Name") {
-  const { scope, className, classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, rows, generatedAt } = data;
+  const { scope, className, academicYearName, classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, rows, generatedAt } = data;
   const isSchoolWide = scope === "school";
 
   const maleCount = rows.filter((r) => r.sex === "Male").length;
@@ -1098,9 +1181,163 @@ function generateStudentRosterPdf(data, schoolName = "School Name") {
     pageMargins: [36, 36, 36, 50],
     content: [
       thinOuterBorder([
-        studentRosterHeader(schoolName, scopeLabel, isSchoolWide ? null : classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, generatedAt),
+        studentRosterHeader(schoolName, scopeLabel, academicYearName, isSchoolWide ? null : classTeacherName, genderLabel, schoolPhone, schoolEmail, schoolAddress, generatedAt),
         studentListSummary(rows.length, maleCount, femaleCount),
         studentTable,
+        studentListFooter(schoolName),
+      ]),
+    ],
+    footer: (currentPage, pageCount) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: "center",
+      fontSize: 8,
+      color: "#6b7280",
+      margin: [0, 8, 0, 0],
+    }),
+    defaultStyle: { font: "Roboto", fontSize: 10, color: BLACK },
+  };
+
+  const pdfDoc = printer.createPdfKitDocument(docDefinition);
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    pdfDoc.on("data", (chunk) => chunks.push(chunk));
+    pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
+    pdfDoc.on("error", reject);
+    pdfDoc.end();
+  });
+}
+
+// Borderless header for the numbers-only school report — same conventions
+// as studentRosterHeader, but titled for a headcount/enrollment summary
+// rather than a name list.
+function schoolReportHeader(schoolName, academicYearName, schoolPhone, schoolEmail, schoolAddress, generatedAt) {
+  const infoRow = (leftText, rightText) => ({
+    columns: [
+      { text: leftText, fontSize: 9.5 },
+      { text: rightText || "", fontSize: 9.5, alignment: "right" },
+    ],
+    margin: [0, 2, 0, 0],
+  });
+
+  return {
+    stack: [
+      { text: schoolName || "School", alignment: "center", fontSize: 16, bold: true, color: BLACK },
+      {
+        text: "SCHOOL REPORT — NUMBERS SUMMARY",
+        alignment: "center",
+        fontSize: 10.5,
+        bold: true,
+        color: "#444444",
+        margin: [0, 3, 0, 10],
+      },
+      infoRow(academicYearName ? `Academic Year: ${academicYearName}` : "", `Generated: ${generatedAt}`),
+      infoRow(schoolPhone ? `Phone: ${schoolPhone}` : "", schoolEmail ? `Email: ${schoolEmail}` : ""),
+      infoRow(schoolAddress ? `Location: ${schoolAddress}` : "", ""),
+    ],
+    margin: [0, 0, 0, 14],
+  };
+}
+
+// A row of plain (borderless) count boxes — Students / Boys / Girls /
+// Classes / Teachers / Modules — sitting right under the header, mirroring
+// the StatCard row on the manager's Statistics page but as static numbers.
+function overviewNumberRow(overview) {
+  const cell = (value, label) => ({
+    stack: [
+      { text: String(value), fontSize: 18, bold: true, alignment: "center" },
+      { text: label, fontSize: 8, color: "#6b7280", alignment: "center", margin: [0, 2, 0, 0] },
+    ],
+  });
+
+  return {
+    table: {
+      widths: ["*", "*", "*", "*", "*", "*"],
+      body: [
+        [
+          cell(overview.totalStudents, "Total Students"),
+          cell(overview.boys, "Boys"),
+          cell(overview.girls, "Girls"),
+          cell(overview.totalClasses, "Classes"),
+          cell(overview.activeTeachers, "Active Teachers"),
+          cell(overview.totalModules, "Modules"),
+        ],
+      ],
+    },
+    layout: plainLayout,
+    margin: [0, 0, 0, 16],
+  };
+}
+
+// GET .../statistics/report/pdf — a manager's numbers-only school report:
+// total enrollment, gender split, class/teacher/module counts, and a
+// per-class breakdown table — no student names or personal details at all,
+// just counts. Kept strictly black-and-white like the other roster/list
+// PDFs, with a single thin outer border and a thin-bordered grid for the
+// per-class table.
+function generateSchoolNumbersReportPdf(data, schoolName = "School Name") {
+  const { academicYearName, overview, classGenderBreakdown, schoolPhone, schoolEmail, schoolAddress, generatedAt } = data;
+
+  const headerCell = (text, alignment) => ({ text, bold: true, fontSize: 9, alignment: alignment || "center" });
+
+  const tableBody = [
+    [
+      headerCell("#", "center"),
+      headerCell("Class", "left"),
+      headerCell("Students", "center"),
+      headerCell("Boys", "center"),
+      headerCell("Girls", "center"),
+    ],
+    ...classGenderBreakdown.map((c, idx) => [
+      { text: String(idx + 1), fontSize: 9, alignment: "center" },
+      { text: c.className, fontSize: 9, bold: true },
+      { text: String(c.totalStudents), fontSize: 9, alignment: "center" },
+      { text: String(c.boys), fontSize: 9, alignment: "center" },
+      { text: String(c.girls), fontSize: 9, alignment: "center" },
+    ]),
+    [
+      { text: "TOTAL", fontSize: 9, bold: true, colSpan: 2 },
+      {},
+      { text: String(overview.totalStudents), fontSize: 9, bold: true, alignment: "center" },
+      { text: String(overview.boys), fontSize: 9, bold: true, alignment: "center" },
+      { text: String(overview.girls), fontSize: 9, bold: true, alignment: "center" },
+    ],
+  ];
+
+  if (classGenderBreakdown.length === 0) {
+    tableBody.splice(1, 0, [
+      { text: "No classes in the current academic year yet.", colSpan: 5, alignment: "center", fontSize: 9, italics: true },
+      {}, {}, {}, {},
+    ]);
+  }
+
+  const classTable = {
+    table: {
+      headerRows: 1,
+      widths: [24, "*", "auto", "auto", "auto"],
+      dontBreakRows: true,
+      body: tableBody,
+    },
+    layout: thinGridLayout,
+  };
+
+  const staffModulesRow = {
+    columns: [
+      { text: `Total Teachers: ${overview.totalTeachers}`, fontSize: 9.5 },
+      { text: `Active Teachers: ${overview.activeTeachers}`, fontSize: 9.5, alignment: "center" },
+      { text: `Modules: ${overview.totalModules}`, fontSize: 9.5, alignment: "right" },
+    ],
+    margin: [0, 14, 0, 0],
+  };
+
+  const docDefinition = {
+    pageMargins: [36, 36, 36, 50],
+    content: [
+      thinOuterBorder([
+        schoolReportHeader(schoolName, academicYearName, schoolPhone, schoolEmail, schoolAddress, generatedAt),
+        overviewNumberRow(overview),
+        { text: "Enrollment by Class", fontSize: 10.5, bold: true, margin: [0, 0, 0, 6] },
+        classTable,
+        staffModulesRow,
         studentListFooter(schoolName),
       ]),
     ],

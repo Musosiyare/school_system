@@ -5,6 +5,7 @@ const { User, School } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendPasswordResetEmail } = require("../utils/mailer");
+const { getMaintenanceFlag } = require("./settingsController");
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -60,7 +61,15 @@ const login = asyncHandler(async (req, res) => {
   }
 
   // Only after the password is confirmed do we distinguish "wrong credentials"
-  // from "correct credentials, but this account has been deactivated".
+  // from other reasons access is currently blocked — maintenance mode included.
+  // Superusers are exempt so there's always a way to get in and switch it off.
+  if (user.role !== "superuser") {
+    const flag = await getMaintenanceFlag();
+    if (flag.maintenanceMode) {
+      throw ApiError.maintenance(flag.message);
+    }
+  }
+
   if (user.status !== "active") {
     throw ApiError.unauthorized(
       "Your account has been deactivated. Please contact your school administrator."

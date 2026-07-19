@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const ApiError = require("../utils/ApiError");
 const { School, User } = require("../models");
+const { getMaintenanceFlag } = require("../controllers/settingsController");
 
 /**
  * Verifies the JWT and attaches req.user = { id, role, schoolId }.
@@ -27,6 +28,17 @@ async function authenticate(req, res, next) {
     }
     if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.tokenVersion) {
       return next(ApiError.unauthorized("Session has ended. Please log in again."));
+    }
+
+    // Maintenance mode locks out everyone except superusers, at the API
+    // level — not just the frontend's own gating (Layout.jsx), since a
+    // manager/teacher's client could still be sitting on an already-loaded
+    // page and issuing requests directly.
+    if (payload.role !== "superuser") {
+      const flag = await getMaintenanceFlag();
+      if (flag.maintenanceMode) {
+        return next(ApiError.maintenance(flag.message));
+      }
     }
 
     req.user = payload; // { id, role, schoolId, tokenVersion }

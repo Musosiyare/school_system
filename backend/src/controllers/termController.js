@@ -1,6 +1,7 @@
 const { Term, AcademicYear } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { assertCurrentYear } = require("../utils/academicYear");
 
 // PATCH /api/terms/:id/lock  { isLocked: true|false }
 // Manager-only. Locking a term also blocks teachers (but not the manager)
@@ -16,6 +17,10 @@ const setTermLock = asyncHandler(async (req, res) => {
   if (!term || term.AcademicYear.schoolId !== req.schoolId) {
     throw ApiError.notFound("Term not found");
   }
+  // An archived year's lock state is frozen along with everything else in
+  // it — otherwise a manager could unlock an old term and start editing
+  // marks/reports in a year that's supposed to be closed.
+  await assertCurrentYear(term.academicYearId, req.schoolId);
 
   term.isLocked = isLocked;
   await term.save();

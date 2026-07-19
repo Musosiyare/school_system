@@ -5,6 +5,8 @@ const {
   getClass,
   deleteClass,
   setClassSuspended,
+  setClassCategory,
+  setClassName,
   setClassModules,
   assignClassTeacher,
   getIncompleteMarks,
@@ -20,6 +22,8 @@ router.get("/", authorize("manager", "teacher"), listClasses);
 router.get("/:id", authorize("manager", "teacher"), getClass);
 router.delete("/:id", authorize("manager"), deleteClass);
 router.patch("/:id/suspend", authorize("manager"), setClassSuspended);
+router.patch("/:id/category", authorize("manager"), setClassCategory);
+router.patch("/:id/name", authorize("manager"), setClassName);
 router.put("/:id/modules", authorize("manager"), setClassModules);
 router.post("/:id/assign-teacher", authorize("manager"), assignClassTeacher);
 

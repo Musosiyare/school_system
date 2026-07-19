@@ -29,6 +29,14 @@ class ApiError extends Error {
   ) {
     return new ApiError(423, "REPORTS_DISABLED", message);
   }
+  static yearArchived(
+    message = "This academic year is archived and read-only. Switch to the current academic year to make changes."
+  ) {
+    return new ApiError(423, "YEAR_ARCHIVED", message);
+  }
+  static maintenance(message = "The system is currently under maintenance. Please check back shortly.") {
+    return new ApiError(503, "MAINTENANCE_MODE", message);
+  }
 }
 
 module.exports = ApiError;

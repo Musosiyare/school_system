@@ -18,6 +18,12 @@ Notification.init(
     termId: { type: DataTypes.INTEGER, allowNull: true },
     message: { type: DataTypes.TEXT, allowNull: false },
     isRead: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // Tags system-generated notifications (as opposed to a teacher/manager's
+    // own freeform reminder) so they can be found and cleared as a batch —
+    // e.g. "maintenance_schedule" notices get deleted the moment the
+    // notification is turned off, cancelled, or superseded. Null for
+    // ordinary person-to-person notifications.
+    source: { type: DataTypes.STRING, allowNull: true },
   },
   { sequelize, modelName: "Notification", tableName: "notifications" }
 );

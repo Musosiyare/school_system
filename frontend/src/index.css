@@ -97,15 +97,25 @@ body {
   #print-root .report-watermark-svg * {
     background: transparent !important;
   }
+  /* Same technique as the watermark override above: the blanket "force
+     black text" rule would otherwise flatten the "MID-TERM REPORT CARD" /
+     term heading to black on print. This targets just that heading with
+     higher specificity (#print-root .report-title-color beats
+     #print-root *) so it keeps printing in its intended navy blue. */
+  #print-root .report-title-color,
+  #print-root .report-title-color * {
+    color: var(--report-title-color) !important;
+  }
+  /* Same technique, for the "ACADEMIC PERFORMANCE" section label so it
+     keeps printing in navy blue instead of being flattened to black. */
+  #print-root .report-section-title-color,
+  #print-root .report-section-title-color * {
+    color: var(--section-title-color) !important;
+  }
   /* Gives .report-card-page a floor of exactly one A4 page's content height
-     (297mm minus the 12mm top+bottom @page margin above = 273mm). The
-     signatures+footer block is `position: absolute; bottom: 14` inside this
-     card (see ReportCardTable in Reports.jsx) — with no min-height, the
-     card would only be as tall as its content, so "bottom: 14" would land
-     wherever that content happened to end, not at the actual bottom of the
-     printed page. With the floor in place, bottom:14 always lands at the
-     true bottom of the page, so the footer can never be left with "just
-     barely not enough room" and pushed onto a second, near-empty page. A
+     (297mm minus the 12mm top+bottom @page margin above = 273mm), so every
+     printed report card fills a full page (border included) even when its
+     content — banner, academic table, summary, signatures — is short. A
      card whose content is genuinely taller than one page still falls back
      to natural pagination — min-height only sets a floor, it never clips or
      forces overflow. */
@@ -127,7 +137,10 @@ body {
 .report-table th,
 .report-table td {
   border: 1px solid #000;
-  padding: 8px 12px;
+  /* Kept tight (vs. the old 8px 12px) so the Academic Performance table can
+     hold at least 16 module rows on one printed page without the extra
+     rows overflowing onto a second page. */
+  padding: 3px 6px;
   text-align: left;
   color: #000;
   vertical-align: middle;
@@ -161,6 +174,13 @@ body {
      legible fixed size and let the surrounding .overflow-x-auto wrapper
      (see Reports.jsx) provide horizontal scrolling instead. */
   min-width: 680px;
+  /* Report text uses Bookman Old Style. It's a Windows/Office font, not a
+     web font bundled with the app, so it only renders as Bookman Old Style
+     on devices that have it installed (Windows, or Office installed on
+     Mac); everywhere else it falls back to the nearest similar serif so
+     the report still looks intentional rather than reverting to the app's
+     default sans-serif. */
+  font-family: "Bookman Old Style", "URW Bookman", "Bookman", Georgia, "Times New Roman", serif;
 }
 
 /* Applied to the banner, panels, table rows, remarks and the signature row

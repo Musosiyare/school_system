@@ -1,7 +1,7 @@
 const { Student, Class, School, User, Term } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
-const { buildStudentReport, rankClass, buildStudentProgress } = require("../services/reportService");
+const { buildStudentReport, rankClass, buildStudentProgress, resolveClassIdForYear } = require("../services/reportService");
 const { generateReportCardPdf, generateClassReportPdf } = require("../services/pdfService");
 
 // The school manager's name shows up on every report card, next to the
@@ -56,34 +56,48 @@ async function assertClassAccess(classId, req) {
   return klass;
 }
 
+// Access checks for a student report must use the class they were actually
+// in during that term's year, not wherever they currently sit — otherwise
+// a class teacher loses access to last year's reports for students who
+// have since moved on, and (worse) a *different* class's teacher could gain
+// access just because a student now happens to sit in their class.
+async function resolveClassIdForTerm(student, termId) {
+  const term = await Term.findByPk(termId);
+  if (!term) throw ApiError.notFound("Term not found");
+  return resolveClassIdForYear(student, term.academicYearId);
+}
+
 // GET /api/reports/student/:studentId/term/:termId
 const getStudentReport = asyncHandler(async (req, res) => {
   const student = await assertStudentInSchool(req.params.studentId, req.schoolId);
-  await assertClassAccess(student.classId, req);
+  const effectiveClassId = await resolveClassIdForTerm(student, req.params.termId);
+  await assertClassAccess(effectiveClassId, req);
   await assertReportsEnabled(req.params.termId, req);
 
   const school = await School.findByPk(req.schoolId, { attributes: ["name", "address", "email", "phone"] });
   const report = await buildStudentReport(student.id, req.params.termId);
   if (!report) throw ApiError.notFound("Report data not found");
-  await attachRank(report, student.classId, req.params.termId);
+  await attachRank(report, effectiveClassId, req.params.termId);
   report.schoolManagerName = await getSchoolManagerName(req.schoolId);
   report.schoolName = school?.name || null;
   report.schoolAddress = school?.address || null;
   report.schoolEmail = school?.email || null;
   report.schoolPhone = school?.phone || null;
+  report.classCategory = report.student.classCategory;
   res.json({ report });
 });
 
 // GET /api/reports/student/:studentId/term/:termId/pdf
 const getStudentReportPdf = asyncHandler(async (req, res) => {
   const student = await assertStudentInSchool(req.params.studentId, req.schoolId);
-  await assertClassAccess(student.classId, req);
+  const effectiveClassId = await resolveClassIdForTerm(student, req.params.termId);
+  await assertClassAccess(effectiveClassId, req);
   await assertReportsEnabled(req.params.termId, req);
 
   const school = await School.findByPk(req.schoolId);
   const report = await buildStudentReport(student.id, req.params.termId);
   if (!report) throw ApiError.notFound("Report data not found");
-  await attachRank(report, student.classId, req.params.termId);
+  await attachRank(report, effectiveClassId, req.params.termId);
   const schoolManagerName = await getSchoolManagerName(req.schoolId);
 
   const pdfBuffer = await generateReportCardPdf(
@@ -110,6 +124,7 @@ const getClassReport = asyncHandler(async (req, res) => {
   const schoolManagerName = await getSchoolManagerName(req.schoolId);
   res.json({
     className: klass.name,
+    classCategory: klass.category,
     schoolManagerName,
     schoolName: school?.name || null,
     schoolAddress: school?.address || null,
@@ -134,7 +149,8 @@ const getClassReportPdf = asyncHandler(async (req, res) => {
     schoolManagerName,
     school.address,
     school.email,
-    school.phone
+    school.phone,
+    klass.category
   );
   res.set({
     "Content-Type": "application/pdf",

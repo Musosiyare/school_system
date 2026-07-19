@@ -4,6 +4,8 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Pagination from "../../components/ui/Pagination";
+import ArchivedYearBanner from "../../components/ArchivedYearBanner";
+import { useYear } from "../../context/YearContext";
 import { usePagination } from "../../hooks/usePagination";
 import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui/FormField";
 import { ErrorText } from "../../components/ui/Alerts";
@@ -29,6 +31,7 @@ function sexLabel(sex) {
 export default function Students() {
   const confirm = useConfirm();
   const notify = useNotify();
+  const { viewingYearId, isCurrentView } = useYear();
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [students, setStudents] = useState([]);
@@ -41,8 +44,13 @@ export default function Students() {
   const [query, setQuery] = useState("");
 
   async function loadClasses() {
-    const { data } = await api.get("/classes");
+    if (!viewingYearId) return;
+    const { data } = await api.get("/classes", { params: { academicYearId: viewingYearId } });
     setClasses(data.classes);
+    // The previously-selected class may not exist in the newly-viewed year.
+    setSelectedClassId((prev) =>
+      data.classes.some((c) => String(c.id) === prev) ? prev : ""
+    );
   }
 
   async function loadStudents(classId) {
@@ -53,7 +61,8 @@ export default function Students() {
 
   useEffect(() => {
     loadClasses();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingYearId]);
 
   useEffect(() => {
     loadStudents(selectedClassId);
@@ -166,10 +175,13 @@ export default function Students() {
 
   return (
     <div>
+      <ArchivedYearBanner />
       <div className="flex justify-end mb-6">
-        <Button onClick={openCreate} disabled={!selectedClassId}>
-          <Plus size={16} /> Enroll Student
-        </Button>
+        {isCurrentView && (
+          <Button onClick={openCreate} disabled={!selectedClassId}>
+            <Plus size={16} /> Enroll Student
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -246,26 +258,30 @@ export default function Students() {
                     )}
                   </Td>
                   <Td>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        title="Edit"
-                        aria-label="Edit"
-                        onClick={() => openEdit(s)}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        title="Delete"
-                        aria-label="Delete"
-                        onClick={() => handleDelete(s)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
+                    {isCurrentView ? (
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          title="Edit"
+                          aria-label="Edit"
+                          onClick={() => openEdit(s)}
+                        >
+                          <Pencil size={14} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          title="Delete"
+                          aria-label="Delete"
+                          onClick={() => handleDelete(s)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-right text-xs text-slate-400">Read-only</div>
+                    )}
                   </Td>
                 </tr>
               ))}
@@ -301,7 +317,8 @@ export default function Students() {
                 <GraduationCap size={16} className="text-white" />
               </div>
               <p className="text-xs text-brand-700 leading-snug">
-                A 6-digit Student ID is generated automatically once you enroll this student.
+                A Student ID is generated automatically from the school, class, and enrollment year once you
+                enroll this student.
               </p>
             </div>
           )}
@@ -325,6 +342,7 @@ export default function Students() {
                   icon={User}
                   value={form.firstName}
                   onChange={(e) => updateField("firstName", e.target.value)}
+                  placeholder="e.g. Aline"
                   required
                   autoFocus
                 />
@@ -334,6 +352,7 @@ export default function Students() {
                   icon={User}
                   value={form.lastName}
                   onChange={(e) => updateField("lastName", e.target.value)}
+                  placeholder="e.g. Uwase"
                   required
                 />
               </Field>
@@ -363,7 +382,7 @@ export default function Students() {
                   icon={UserCircle2}
                   value={form.guardianName}
                   onChange={(e) => updateField("guardianName", e.target.value)}
-                  placeholder="Optional"
+                  placeholder="e.g. Jean Baptiste (optional)"
                 />
               </Field>
               <Field label="Guardian Phone">
@@ -371,7 +390,7 @@ export default function Students() {
                   icon={Phone}
                   value={form.guardianPhone}
                   onChange={(e) => updateField("guardianPhone", e.target.value)}
-                  placeholder="Optional"
+                  placeholder="e.g. 0788123456"
                 />
               </Field>
             </div>

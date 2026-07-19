@@ -146,6 +146,7 @@ export default function TeacherDashboard() {
       label: "Modules Assigned",
       value: assignments.length,
       icon: BookOpen,
+      accent: "from-amber-400 to-amber-600",
       onClick: () => focusAssignments("module"),
       clickable: assignments.length > 0,
     },
@@ -153,6 +154,7 @@ export default function TeacherDashboard() {
       label: "Classes Taught",
       value: uniqueClassIds.length,
       icon: Layers,
+      accent: "from-teal-400 to-teal-600",
       onClick: () => focusAssignments("class"),
       clickable: assignments.length > 0,
     },
@@ -160,6 +162,7 @@ export default function TeacherDashboard() {
       label: "Students (est.)",
       value: totalStudents,
       icon: Users,
+      accent: "from-blue-400 to-blue-600",
       onClick: () => openStudentsModal(null),
       clickable: assignments.length > 0,
     },
@@ -167,6 +170,7 @@ export default function TeacherDashboard() {
       label: "Class Teacher Of",
       value: classesTaught.length,
       icon: Star,
+      accent: "from-violet-400 to-violet-600",
       onClick: focusClassTeacher,
       clickable: classesTaught.length > 0,
     },
@@ -178,12 +182,14 @@ export default function TeacherDashboard() {
       label: "Record Marks",
       hint: "Enter or update scores for your assigned modules",
       icon: PencilLine,
+      accent: "from-emerald-400 to-emerald-600",
     },
     {
       to: "/teacher/reports",
       label: "View Reports",
       hint: "See class rankings and download report cards",
       icon: FileText,
+      accent: "from-brand-400 to-brand-600",
     },
   ];
 
@@ -196,15 +202,19 @@ export default function TeacherDashboard() {
             type="button"
             onClick={s.onClick}
             disabled={!s.clickable}
-            className={`group text-left bg-white border border-slate-200 rounded-xl p-4 sm:p-5 transition
-              ${s.clickable ? "hover:border-brand-300 hover:shadow-sm cursor-pointer" : "cursor-default opacity-70"}`}
+            className={`group text-left bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-200
+              ${s.clickable ? "hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300 cursor-pointer" : "cursor-default opacity-70"}`}
           >
-            <div className="flex items-start justify-between">
-              <s.icon className="text-brand-600 mb-2" size={20} />
+            <div className="flex items-start justify-between mb-3">
+              <div
+                className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${s.accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+              >
+                <s.icon size={18} />
+              </div>
               {s.clickable && (
                 <ArrowRight
                   size={14}
-                  className="text-slate-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition"
+                  className="mt-1.5 text-slate-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition"
                 />
               )}
             </div>
@@ -219,16 +229,18 @@ export default function TeacherDashboard() {
           <Link
             key={link.to}
             to={link.to}
-            className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 hover:border-brand-300 hover:shadow-sm transition"
+            className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300 transition-all duration-200"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-600">
+            <div
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${link.accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+            >
               <link.icon size={20} />
             </div>
             <div className="min-w-0">
               <p className="font-semibold text-slate-800">{link.label}</p>
               <p className="text-sm text-slate-500">{link.hint}</p>
             </div>
-            <ArrowRight size={16} className="ml-auto shrink-0 text-slate-300" />
+            <ArrowRight size={16} className="ml-auto shrink-0 text-slate-300 group-hover:text-brand-400 group-hover:translate-x-0.5 transition-all" />
           </Link>
         ))}
       </div>
@@ -236,7 +248,14 @@ export default function TeacherDashboard() {
       {classesTaught.length > 0 && (
         <div ref={classTeacherRef}>
           <Card
-            title="Classes You're the Class Teacher For"
+            title={
+              <span className="inline-flex items-center gap-2.5">
+                <span className="h-8 w-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-violet-400 to-violet-600 text-white shadow-sm">
+                  <Star size={15} />
+                </span>
+                Classes You're the Class Teacher For
+              </span>
+            }
             subtitle="You're responsible for remarks and overall report sign-off for these classes."
           >
             <div className="flex flex-wrap gap-2">
@@ -257,7 +276,14 @@ export default function TeacherDashboard() {
 
       <div ref={assignmentsRef}>
         <Card
-          title="Your Teaching Assignments"
+          title={
+            <span className="inline-flex items-center gap-2.5">
+              <span className="h-8 w-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm">
+                <BookOpen size={15} />
+              </span>
+              Your Teaching Assignments
+            </span>
+          }
           subtitle="Modules and classes assigned to you."
           actions={
             assignments.length > 0 && (
@@ -285,7 +311,7 @@ export default function TeacherDashboard() {
                 return (
                   <div
                     key={group.key}
-                    className="rounded-xl border border-slate-200 overflow-hidden transition"
+                    className="rounded-2xl border border-slate-200 overflow-hidden transition-all duration-200 hover:border-slate-300"
                   >
                     <div
                       role="button"
@@ -296,8 +322,8 @@ export default function TeacherDashboard() {
                       }}
                       className="w-full flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 bg-white hover:bg-slate-50 transition text-left cursor-pointer"
                     >
-                      <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-600">
-                        <GroupIcon size={15} />
+                      <span className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-sm">
+                        <GroupIcon size={16} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block font-semibold text-slate-800 truncate text-sm sm:text-base">
@@ -397,7 +423,7 @@ export default function TeacherDashboard() {
                   key={s.id}
                   className="flex items-start gap-3 rounded-lg border border-slate-200 px-3.5 py-2.5"
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white shadow-sm">
                     <UserCircle size={18} />
                   </span>
                   <div className="min-w-0 flex-1">
@@ -440,7 +466,7 @@ export default function TeacherDashboard() {
                   className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3.5 py-2.5 text-left hover:border-brand-300 hover:bg-brand-50/50 transition"
                 >
                   <span className="flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-600">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 text-white shadow-sm">
                       <Layers size={15} />
                     </span>
                     <span className="text-sm font-medium text-slate-800">{row.className}</span>

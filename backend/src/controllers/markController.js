@@ -2,6 +2,7 @@ const ExcelJS = require("exceljs");
 const { Mark, TeacherModuleAssignment, Term, Module, Student, Class, School, User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { assertCurrentYear } = require("../utils/academicYear");
 const { generateMarksEvidencePdf } = require("../services/pdfService");
 
 async function assertTeacherIsAssigned(userId, role, moduleId, classId) {
@@ -31,6 +32,10 @@ async function saveMarkEntries({ classId, moduleId, termId, entries, userId, sch
   const term = await Term.findByPk(termId);
   if (!term) throw ApiError.badRequest("Invalid termId");
   if (term.isLocked) throw ApiError.termLocked();
+  // An archived year's terms are read-only regardless of the manual lock —
+  // this is the actual boundary that keeps a past year from ever being
+  // edited after the school has moved on from it.
+  await assertCurrentYear(term.academicYearId, schoolId);
 
   const module = await Module.findOne({ where: { id: moduleId, schoolId } });
   if (!module) throw ApiError.badRequest("Invalid moduleId for this school");

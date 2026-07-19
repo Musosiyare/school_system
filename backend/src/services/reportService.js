@@ -1,19 +1,52 @@
-const { Student, Class, Module, ClassModule, Mark, Term, ReportRemark, User, TeacherModuleAssignment } = require("../models");
+const {
+  Student,
+  StudentEnrollment,
+  Class,
+  Module,
+  ClassModule,
+  Mark,
+  Term,
+  AcademicYear,
+  ReportRemark,
+  User,
+  TeacherModuleAssignment,
+} = require("../models");
+
+// Resolves the class a student actually belonged to during a given
+// academic year — not just wherever they currently sit. Student.classId is
+// only the LIVE pointer (updated whenever a manager moves someone to a new
+// class), so once a student has been moved on, using it directly for an
+// older term would silently pull in the wrong class's modules/roster/
+// teachers. StudentEnrollment carries the real historical link; the live
+// classId is only a fallback for records that predate that table.
+async function resolveClassIdForYear(student, academicYearId) {
+  const enrollment = await StudentEnrollment.findOne({
+    where: { studentId: student.id, academicYearId },
+  });
+  return enrollment ? enrollment.classId : student.classId;
+}
 
 /**
  * Builds the full report data for a single student in a single term.
  * Implements SRS section 5: Business Rules & Calculation Logic.
  */
 async function buildStudentReport(studentId, termId) {
-  const student = await Student.findByPk(studentId, { include: [Class] });
+  const student = await Student.findByPk(studentId);
   if (!student) return null;
 
   const term = await Term.findByPk(termId);
   if (!term) return null;
 
+  const academicYear = await AcademicYear.findByPk(term.academicYearId);
+
+  // The class this student was actually in during the term's academic
+  // year — may differ from their current class if they've since moved on.
+  const effectiveClassId = await resolveClassIdForYear(student, term.academicYearId);
+  const klass = await Class.findByPk(effectiveClassId);
+
   // All modules taught in this student's class
   const classModules = await ClassModule.findAll({
-    where: { classId: student.classId },
+    where: { classId: effectiveClassId },
     include: [Module],
   });
 
@@ -26,7 +59,7 @@ async function buildStudentReport(studentId, termId) {
   // module on the report card, since the module title alone doesn't say who
   // to go to about it.
   const moduleAssignments = await TeacherModuleAssignment.findAll({
-    where: { classId: student.classId },
+    where: { classId: effectiveClassId },
     include: [{ model: User, as: "teacher", attributes: ["id", "name"] }],
   });
   const teacherNameByModule = Object.fromEntries(
@@ -35,8 +68,8 @@ async function buildStudentReport(studentId, termId) {
 
   const remark = await ReportRemark.findOne({ where: { studentId, termId } });
 
-  const classTeacher = student.Class && student.Class.classTeacherId
-    ? await User.findByPk(student.Class.classTeacherId, { attributes: ["id", "name"] })
+  const classTeacher = klass && klass.classTeacherId
+    ? await User.findByPk(klass.classTeacherId, { attributes: ["id", "name"] })
     : null;
 
   let weightedScoreSum = 0;
@@ -98,11 +131,13 @@ async function buildStudentReport(studentId, termId) {
     student: {
       id: student.id,
       name: `${student.firstName} ${student.lastName}`,
-      class: student.Class ? student.Class.name : null,
+      class: klass ? klass.name : null,
+      classCategory: klass ? klass.category : null,
       admissionNumber: student.admissionNumber,
       guardianName: student.guardianName,
     },
     term: term.name,
+    academicYear: academicYear ? academicYear.name : null,
     modules,
     weightedAverage,
     weightedPassLine,
@@ -117,7 +152,23 @@ async function buildStudentReport(studentId, termId) {
  * Standard competition ranking: ties share the same rank.
  */
 async function rankClass(classId, termId) {
-  const students = await Student.findAll({ where: { classId }, order: [["firstName", "ASC"]] });
+  // The roster for this class/year comes from StudentEnrollment, not the
+  // live Student.classId — otherwise a student who has since been moved to
+  // a new class would silently vanish from an old term's class report.
+  // Records created before enrollment-tracking existed fall back to a live
+  // classId match so nothing already in the database goes missing.
+  const [enrollments, liveStudents] = await Promise.all([
+    StudentEnrollment.findAll({ where: { classId }, include: [Student] }),
+    Student.findAll({ where: { classId } }),
+  ]);
+  const byId = new Map();
+  enrollments.forEach((e) => {
+    if (e.Student) byId.set(e.Student.id, e.Student);
+  });
+  liveStudents.forEach((s) => {
+    if (!byId.has(s.id)) byId.set(s.id, s);
+  });
+  const students = [...byId.values()].sort((a, b) => a.firstName.localeCompare(b.firstName));
 
   const reports = await Promise.all(
     students.map((s) => buildStudentReport(s.id, termId))
@@ -176,4 +227,4 @@ async function buildStudentProgress(studentId) {
   };
 }
 
-module.exports = { buildStudentReport, rankClass, buildStudentProgress };
+module.exports = { buildStudentReport, rankClass, buildStudentProgress, resolveClassIdForYear };

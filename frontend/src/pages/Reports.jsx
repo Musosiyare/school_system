@@ -1,14 +1,73 @@
 import { useEffect, useState } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { useYear } from "../context/YearContext";
+import ArchivedYearBanner from "../components/ArchivedYearBanner";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
 import Modal from "../components/ui/Modal";
 import { Field, Select } from "../components/ui/FormField";
 import { EmptyRow } from "../components/ui/Table";
-import { useNotify } from "../components/ui/NotifyProvider";
-import { Download, Eye, Lock, Unlock, MapPin, Printer, Files, GraduationCap, AlertTriangle, Phone, Mail } from "lucide-react";
+import { Eye, Lock, Unlock, MapPin, Printer, Files, GraduationCap, AlertTriangle, Phone, Mail } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+
+// Report title heading color (navy blue, bold). This is the one spot on the
+// otherwise black-and-white report card that's intentionally colored.
+const REPORT_TITLE_COLOR = "#0a2f5c";
+// "ACADEMIC PERFORMANCE" section label color — same navy blue as
+// REPORT_TITLE_COLOR. Other section labels (e.g. SIGNATURES) stay black.
+const SECTION_TITLE_COLOR = "#0a2f5c";
+
+// Encodes only school name, school phone, student name, student code,
+// class, marks (weighted average), and rank — as plain multi-line text,
+// readable by any QR scanner without needing a special format. Mirrors
+// studentInfoQrData() in the backend's pdfService.js so the on-screen/print
+// report and the downloaded PDF show the same data.
+// Appends the class's education track — TSS (Technical Secondary School) or
+// GE (General Education) — next to its name, e.g. "S1A (TSS)". Mirrors
+// classLabel() in the backend's pdfService.js.
+function classLabel(className, classCategory) {
+  const name = className || "-";
+  if (classCategory !== "TSS" && classCategory !== "GE") return name;
+  return `${name} (${classCategory})`;
+}
+
+// Full track name shown ahead of the report card title, e.g.
+// "TECHNICAL SECONDARY SCHOOL / MID-TERM REPORT CARD". Mirrors
+// categoryFullName()/reportCardTitle() in the backend's pdfService.js.
+function categoryFullName(classCategory) {
+  if (classCategory === "TSS") return "TECHNICAL SECONDARY SCHOOL";
+  if (classCategory === "GE") return "GENERAL EDUCATION";
+  return null;
+}
+
+function reportCardTitle(classCategory) {
+  const prefix = categoryFullName(classCategory);
+  return prefix ? `${prefix} / MID-TERM REPORT CARD` : "MID-TERM REPORT CARD";
+}
+
+function studentInfoQrValue(schoolName, schoolPhone, report, className, classCategory) {
+  const rankText =
+    report.classRank != null && report.classRankTotal
+      ? `${report.classRank} out of ${report.classRankTotal}`
+      : "N/A";
+  const marksText =
+    report.weightedAverage !== null && report.weightedAverage !== undefined
+      ? `${report.weightedAverage}%`
+      : "N/A";
+  const resolvedClassName = className || report.student?.class;
+  const lines = [
+    schoolName,
+    schoolPhone,
+    report.student?.name ? `Student: ${report.student.name}` : null,
+    report.student?.admissionNumber ? `Student Code: ${report.student.admissionNumber}` : null,
+    resolvedClassName ? `Class: ${classLabel(resolvedClassName, classCategory ?? report.student?.classCategory)}` : null,
+    `Marks: ${marksText}`,
+    `Rank: ${rankText}`,
+  ].filter(Boolean);
+  return lines.length ? lines.join("\n") : "Student Info";
+}
 
 // PASS/FAIL is displayed using competency-based terminology: C (Competent) /
 // NYC (Not Yet Competent). Each module's decision comes only from that
@@ -62,12 +121,11 @@ function overallGradeColor(weightedAverage) {
   return "#6b7280"; // N/A — gray
 }
 
-// Watermark shows the FULL school name (no longer abbreviated to just the
-// first word). Mirrors watermarkText() in
-// backend/src/services/pdfService.js so the on-screen/print watermark and
-// the PDF watermark always show the same text.
-function watermarkText(schoolName) {
-  return (schoolName || "School").trim().toUpperCase();
+// Watermark shows the class name (previously the school name). Mirrors
+// watermarkText() in backend/src/services/pdfService.js so the on-screen/
+// print watermark and the PDF watermark always show the same text.
+function watermarkText(className) {
+  return (className || "Class").trim().toUpperCase();
 }
 
 
@@ -87,15 +145,15 @@ const BRAND_BLUE = "#000000";
 const BRAND_BLUE_LIGHT = "#ffffff";
 const PANEL_GREY = "#ffffff";
 
-function SectionLabel({ children }) {
+function SectionLabel({ children, color, fontSize }) {
   return (
     <div
-      className="report-section-label"
+      className={color ? "report-section-label report-section-title-color" : "report-section-label"}
       style={{
         background: BRAND_BLUE_LIGHT,
-        color: BRAND_BLUE,
+        color: color || BRAND_BLUE,
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: fontSize || 11,
         padding: "6px 10px",
         margin: "10px 0 8px",
       }}
@@ -105,7 +163,7 @@ function SectionLabel({ children }) {
   );
 }
 
-function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoolPhone, className, termName }) {
+function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoolPhone, className, classCategory, termName }) {
   const contactLine = [schoolPhone, schoolEmail].filter(Boolean).join("  ·  ");
   return (
     // report-card-page is sized/scaled to fit one printed page — see
@@ -116,15 +174,26 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
     // keeps its own bordered grid.
     <div
       className="report-card-page"
-      style={{ border: "1.5px solid #000", padding: "14px 14px 90px", position: "relative" }}
+      style={{
+        border: "1.5px solid #000",
+        padding: "14px",
+        position: "relative",
+        "--report-title-color": REPORT_TITLE_COLOR,
+        "--section-title-color": SECTION_TITLE_COLOR,
+      }}
     >
       {/* Banner: centered title/term on top, then school (left) and
           labeled student details (right) below — mirrors the PDF's
           letterhead() layout. Every line uses the same font size. */}
       <div className="report-avoid-break" style={{ padding: "10px 14px", marginBottom: 10 }}>
-        <div style={{ textAlign: "center", marginBottom: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 12, lineHeight: 1.3 }}>MID-TERM REPORT CARD</div>
-          <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>{termName || report.term}</div>
+        <div className="report-title-color" style={{ textAlign: "center", marginBottom: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.3, color: REPORT_TITLE_COLOR }}>
+            {reportCardTitle(classCategory ?? report.student?.classCategory)}
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 13, marginTop: 2, color: REPORT_TITLE_COLOR }}>
+            {termName || report.term}
+            {report.academicYear ? ` — ${report.academicYear}` : ""}
+          </div>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
@@ -142,7 +211,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
               Student Name: {report.student?.name || "-"}
             </div>
             <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
-              Class: {className || report.student?.class || "-"}
+              Class: {classLabel(className || report.student?.class, classCategory ?? report.student?.classCategory)}
             </div>
             <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
               Student ID: {report.student?.admissionNumber || "-"}
@@ -151,7 +220,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
         </div>
       </div>
 
-      <SectionLabel>ACADEMIC PERFORMANCE</SectionLabel>
+      <SectionLabel color={SECTION_TITLE_COLOR} fontSize={14}>ACADEMIC PERFORMANCE</SectionLabel>
 
       <table className="report-table report-avoid-break" style={{ marginBottom: 4, tableLayout: "fixed", width: "100%" }}>
         <colgroup>
@@ -167,9 +236,9 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
             <th style={{ ...center, whiteSpace: "nowrap" }}>Module Type</th>
             <th style={{ ...th, whiteSpace: "nowrap" }}>Code</th>
             <th style={th}>Module Name</th>
-            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "8px 6px" }}>Weight</th>
-            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "8px 6px" }}>Score</th>
-            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "8px 6px" }}>Decision</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "3px 6px" }}>Weight</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "3px 6px" }}>Score</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "3px 6px" }}>Decision</th>
           </tr>
         </thead>
         <tbody>
@@ -188,7 +257,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
                   style={{
                     ...center,
                     verticalAlign: "middle",
-                    padding: "8px 5px",
+                    padding: "3px 5px",
                     overflowWrap: "break-word",
                     wordBreak: "break-word",
                   }}
@@ -201,20 +270,20 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
                   </div>
                 </td>
               )}
-              <td style={{ fontWeight: 700, whiteSpace: "nowrap", padding: "8px 10px" }}>{m.code || "-"}</td>
+              <td style={{ fontWeight: 700, whiteSpace: "nowrap", padding: "3px 8px" }}>{m.code || "-"}</td>
               <td>{m.title}</td>
-              <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>{m.weight}</td>
+              <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "3px 6px" }}>{m.weight}</td>
               <td
                 style={{
                   ...center,
                   fontWeight: m.score === null ? 700 : 400,
                   whiteSpace: "nowrap",
-                  padding: "8px 6px",
+                  padding: "3px 6px",
                 }}
               >
                 {m.score === null ? "N/A" : m.score}
               </td>
-              <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>
+              <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "3px 6px" }}>
                 {toDecision(m.status)}
               </td>
             </tr>
@@ -223,10 +292,10 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
             <td colSpan={3} style={{ textAlign: "right", fontWeight: 700 }}>
               TOTAL
             </td>
-            <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>
+            <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "3px 6px" }}>
               {report.modules.reduce((sum, m) => sum + (m.weight || 0), 0)}
             </td>
-            <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "8px 6px" }}>
+            <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "3px 6px" }}>
               {report.modules.reduce((sum, m) => sum + (m.score || 0), 0)}
             </td>
             <td></td>
@@ -277,24 +346,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
 
       <SectionLabel>SIGNATURES</SectionLabel>
 
-      {/* Signatures + footer are wrapped together and pinned with
-          `position: absolute; bottom: 14` inside the card (which is
-          `position: relative` — see the outer div below). Anchoring it to
-          the card's own bottom edge, instead of just letting it sit
-          wherever normal document flow happens to end, is what stops it
-          from being pushed to a second page: its vertical position no
-          longer depends on how tall the content above it turned out to be,
-          so there's never a "not quite enough room left" gap for the
-          browser to shove it into on its own page. Combined with
-          .report-card-page's print-only min-height of one A4 page (see
-          index.css), bottom:14 always lands at the true bottom of the
-          printed page. The card's own bottom padding (see
-          .report-card-page below) is widened to keep the table/summary
-          content from visually running into this reserved area. */}
-      <div
-        className="report-avoid-break"
-        style={{ position: "absolute", left: 14, right: 14, bottom: 14 }}
-      >
+      <div className="report-avoid-break" style={{ marginTop: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 11 }}>{report.classTeacherName || "Not assigned"}</div>
@@ -305,8 +357,13 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
             <div style={{ fontSize: 8, color: "#000" }}>SCHOOL MANAGER</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontWeight: 700, fontSize: 11 }}>{report.student?.guardianName || "Not assigned"}</div>
-            <div style={{ fontSize: 8, color: "#000" }}>PARENT/GUARDIAN</div>
+            <QRCodeSVG
+              value={studentInfoQrValue(schoolName, schoolPhone, report, className, classCategory)}
+              size={92}
+              level="M"
+              style={{ display: "block", marginLeft: "auto" }}
+            />
+            <div style={{ fontSize: 8, color: "#000", marginTop: 3 }}>STUDENT INFO</div>
           </div>
         </div>
 
@@ -316,7 +373,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
         <div
           style={{
             borderTop: "1px solid #d1d5db",
-            marginTop: 16,
+            marginTop: 10,
             paddingTop: 6,
             display: "flex",
             justifyContent: "space-between",
@@ -328,19 +385,19 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
             Generated:{" "}
             {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
           </span>
-          <span>Class: {className || report.student?.class || "-"}</span>
+          <span>Class: {classLabel(className || report.student?.class, classCategory ?? report.student?.classCategory)}</span>
         </div>
       </div>
 
-      {/* Faint diagonal school-name watermark, shown ONCE, centered and
+      {/* Faint diagonal class-name watermark, shown ONCE, centered and
           layered on top of the whole card at very low opacity so it always
           shows regardless of which sections behind it have solid white
           fills (an earlier version placed it behind the content, which
           made it invisible under the Academic Performance table's opaque
-          background). Shows the FULL school name (previously only the
-          first word was shown). Mirrors the identical single diagonal
-          watermark drawn on every page of the PDF export — see
-          diagonalWatermarkSvg() in backend/src/services/pdfService.js. */}
+          background). Shows the class name (previously the school name).
+          Mirrors the identical single diagonal watermark drawn on every
+          page of the PDF export — see diagonalWatermarkSvg() in
+          backend/src/services/pdfService.js. */}
       <svg
         className="report-watermark-svg"
         viewBox="0 0 640 900"
@@ -366,7 +423,7 @@ function ReportCardTable({ report, schoolName, schoolAddress, schoolEmail, schoo
           textAnchor="middle"
           transform="rotate(-28 320 450)"
         >
-          {watermarkText(schoolName)}
+          {watermarkText(className || report.student?.class)}
         </text>
       </svg>
     </div>
@@ -401,7 +458,7 @@ function ReportBlockedNotice({ message, code, compact }) {
 
 export default function Reports() {
   const { user } = useAuth();
-  const notify = useNotify();
+  const { viewingYearId, viewingYear, isCurrentView } = useYear();
   const [classes, setClasses] = useState([]);
   const [years, setYears] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
@@ -417,9 +474,15 @@ export default function Reports() {
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   useEffect(() => {
+    // Managers browse whichever year is selected in the header switcher;
+    // teachers always work off the current year only (they have no
+    // switcher, and the backend already scopes their own endpoints to it).
+    if (user.role === "manager" && !viewingYearId) return;
+
     (async () => {
+      const classesParams = user.role === "manager" ? { academicYearId: viewingYearId } : {};
       const [classesRes, yearsRes] = await Promise.all([
-        api.get("/classes"),
+        api.get("/classes", { params: classesParams }),
         api.get("/academic-years"),
       ]);
       const visibleClasses =
@@ -427,9 +490,13 @@ export default function Reports() {
           ? classesRes.data.classes.filter((c) => c.classTeacher?.id === user.id)
           : classesRes.data.classes;
       setClasses(visibleClasses);
-      setYears(yearsRes.data.academicYears);
+      setSelectedClassId(""); // the class picked in one year may not exist in another
+      // Managers get the full picture of the viewed year's terms from the
+      // year switcher's own data (it already fetched ?all=true with Terms
+      // included); teachers keep the plain current-year-only fetch.
+      setYears(user.role === "manager" ? (viewingYear ? [viewingYear] : []) : yearsRes.data.academicYears);
     })();
-  }, [user]);
+  }, [user, viewingYearId, viewingYear]);
 
   const currentYear = years.find((y) => y.isCurrent);
   const allTerms = years.flatMap((y) => (y.Terms || []).map((t) => ({ ...t, yearName: y.name, yearIsCurrent: y.isCurrent })));
@@ -473,37 +540,6 @@ export default function Reports() {
       setStudentReportError(err.message);
       setStudentReportErrorCode(err.code || "");
     }
-  }
-
-  async function downloadPdf(url, filename) {
-    const token = localStorage.getItem("token");
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      // Backend sends { error: { code, message } } JSON on failure (e.g.
-      // reports temporarily disabled for this term) — surface that message
-      // instead of silently downloading a broken/corrupt file.
-      let message = "Something went wrong while downloading the report.";
-      let code;
-      try {
-        const data = await res.json();
-        message = data?.error?.message || message;
-        code = data?.error?.code;
-      } catch {
-        // ignore parse failure, fall back to default message
-      }
-      const restricted = code === "REPORTS_DISABLED";
-      notify({
-        title: restricted ? "Report unavailable" : "Download failed",
-        message,
-        tone: restricted ? "restricted" : "error",
-      });
-      return;
-    }
-    const blob = await res.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
   }
 
   // Printing renders the requested report card(s) into the hidden #print-root
@@ -569,6 +605,7 @@ export default function Reports() {
 
   return (
     <div>
+      {user.role === "manager" && <ArchivedYearBanner />}
       <Card>
         <div className="flex items-end gap-4 flex-wrap">
           <Field label="Class" className="min-w-[180px] flex-1 sm:flex-none">
@@ -576,7 +613,7 @@ export default function Reports() {
               <option value="">Select class</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {c.name} {c.category ? `(${c.category})` : ""}
                 </option>
               ))}
             </Select>
@@ -612,8 +649,14 @@ export default function Reports() {
               })}
             </div>
           </Field>
-          {currentYear && (
-            <Badge tone="manager">Current Academic Year: {currentYear.name}</Badge>
+          {user.role === "manager" && viewingYear && (
+            <Badge tone={isCurrentView ? "manager" : "warning"}>
+              {isCurrentView ? "Active Academic Year: " : "Viewing (archived): "}
+              {viewingYear.name}
+            </Badge>
+          )}
+          {user.role !== "manager" && currentYear && (
+            <Badge tone="manager">Active Academic Year: {currentYear.name}</Badge>
           )}
           {selectedTerm?.isLocked && (
             <Badge tone="warning">This term is locked — marks can no longer be edited</Badge>
@@ -654,7 +697,9 @@ export default function Reports() {
 
       {classReport && (
         <Card
-          title={`${classReport.className} — ${selectedTerm?.name}`}
+          title={`${classLabel(classReport.className, classReport.classCategory)} — ${selectedTerm?.name}${
+            selectedTerm?.yearName ? ` (${selectedTerm.yearName})` : ""
+          }`}
           subtitle={
             <>
               Class Teacher: {classReport.reports[0]?.classTeacherName || "Not assigned"} · School
@@ -692,20 +737,6 @@ export default function Reports() {
                   <Files size={14} /> Print All
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="teal"
-                disabled={sortedReports.length === 0}
-                title={sortedReports.length === 0 ? "No students in this class" : undefined}
-                onClick={() =>
-                  downloadPdf(
-                    `${api.defaults.baseURL}/classes/${selectedClassId}/term/${selectedTermId}/report/pdf`,
-                    `class-report-${selectedClassId}-term${selectedTermId}.pdf`
-                  )
-                }
-              >
-                <Download size={14} /> Download Class PDF
-              </Button>
             </div>
           }
         >
@@ -768,18 +799,6 @@ export default function Reports() {
                         <Button size="sm" variant="ghost" onClick={() => openStudentReport(r.student)}>
                           <Eye size={14} /> View
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="teal"
-                          onClick={() =>
-                            downloadPdf(
-                              `${api.defaults.baseURL}/students/${r.student.id}/term/${selectedTermId}/report/pdf`,
-                              `report-${r.student.id}-term${selectedTermId}.pdf`
-                            )
-                          }
-                        >
-                          <Download size={14} />
-                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -805,19 +824,6 @@ export default function Reports() {
                 <Printer size={14} /> Print
               </Button>
             )}
-            {viewingStudent && studentReport && (
-              <Button
-                variant="teal"
-                onClick={() =>
-                  downloadPdf(
-                    `${api.defaults.baseURL}/students/${viewingStudent.id}/term/${selectedTermId}/report/pdf`,
-                    `report-${viewingStudent.id}-term${selectedTermId}.pdf`
-                  )
-                }
-              >
-                <Download size={14} /> Download PDF
-              </Button>
-            )}
           </>
         }
       >
@@ -836,6 +842,7 @@ export default function Reports() {
               schoolEmail={studentReport.schoolEmail}
               schoolPhone={studentReport.schoolPhone}
               className={classReport?.className}
+              classCategory={studentReport.classCategory ?? classReport?.classCategory}
               termName={selectedTerm?.name}
             />
           </div>
@@ -853,6 +860,7 @@ export default function Reports() {
               schoolEmail={r.schoolEmail || classReport?.schoolEmail}
               schoolPhone={r.schoolPhone || classReport?.schoolPhone}
               className={classReport?.className}
+              classCategory={r.student?.classCategory ?? classReport?.classCategory}
               termName={selectedTerm?.name}
             />
           </div>

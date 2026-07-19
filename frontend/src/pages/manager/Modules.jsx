@@ -314,7 +314,7 @@ export default function Modules() {
           required
         />
       </Field>
-      <Field label="Module Weight (also the max score)">
+      <Field label="Module Weight">
         <IconInput
           icon={Gauge}
           type="number"
@@ -322,6 +322,7 @@ export default function Modules() {
           step="1"
           value={values.moduleWeight}
           onChange={(e) => onChange("moduleWeight", e.target.value)}
+          placeholder="e.g. 20 (also the max score)"
           required
         />
       </Field>

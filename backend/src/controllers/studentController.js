@@ -1,10 +1,13 @@
-const { Student, Class, Mark, ReportRemark, School, User } = require("../models");
+const { Student, StudentEnrollment, Class, Mark, ReportRemark, School, User, AcademicYear } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const generateStudentId = require("../utils/generateStudentId");
+const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
 const { generateStudentListPdf, generateStudentRosterPdf } = require("../services/pdfService");
 
-// POST /api/students
+// POST /api/students — always enrolls into a class in the current academic
+// year, and records that enrollment so this year's roster stays correct
+// even after the student is later moved to a different class.
 const createStudent = asyncHandler(async (req, res) => {
   const { classId, firstName, lastName, dob, sex, guardianName, guardianPhone } = req.body;
 
@@ -14,10 +17,9 @@ const createStudent = asyncHandler(async (req, res) => {
 
   const klass = await Class.findOne({ where: { id: classId, schoolId: req.schoolId } });
   if (!klass) throw ApiError.badRequest("Invalid classId for this school");
+  await assertCurrentYear(klass.academicYearId, req.schoolId);
 
-  // Student ID is never typed in by hand — it's a random 6-digit code
-  // generated here, so every student gets one automatically at enrollment.
-  const admissionNumber = await generateStudentId();
+  const academicYear = await AcademicYear.findByPk(klass.academicYearId);
 
   const student = await Student.create({
     schoolId: req.schoolId,
@@ -28,7 +30,24 @@ const createStudent = asyncHandler(async (req, res) => {
     sex,
     guardianName,
     guardianPhone,
-    admissionNumber,
+  });
+
+  // The admission number is generated after the row exists so it can use
+  // the student's own auto-increment id as its "insertion id" segment —
+  // see generateStudentId.js for the full format.
+  student.admissionNumber = generateStudentId({
+    schoolId: req.schoolId,
+    className: klass.name,
+    academicYearName: academicYear ? academicYear.name : null,
+    insertionId: student.id,
+  });
+  await student.save();
+
+  await StudentEnrollment.create({
+    studentId: student.id,
+    classId,
+    academicYearId: klass.academicYearId,
+    schoolId: req.schoolId,
   });
 
   res.status(201).json({ student });
@@ -50,10 +69,24 @@ const updateStudent = asyncHandler(async (req, res) => {
     throw ApiError.badRequest("firstName and lastName are required");
   }
 
-  if (classId) {
+  if (classId && Number(classId) !== student.classId) {
     const klass = await Class.findOne({ where: { id: classId, schoolId: req.schoolId } });
     if (!klass) throw ApiError.badRequest("Invalid classId for this school");
+    // A student can only ever be moved INTO a class in the current academic
+    // year — that's what keeps past years' rosters frozen. To revisit an
+    // old year, switch the viewing year instead of editing students into it.
+    await assertCurrentYear(klass.academicYearId, req.schoolId);
     student.classId = classId;
+
+    // Record (or update) this year's enrollment so the new class's roster
+    // picks the student up, without touching any prior year's enrollment
+    // row — that's what keeps last year's class report intact.
+    await StudentEnrollment.upsert({
+      studentId: student.id,
+      classId,
+      academicYearId: klass.academicYearId,
+      schoolId: req.schoolId,
+    });
   }
 
   student.firstName = firstName;
@@ -77,6 +110,9 @@ const deleteStudent = asyncHandler(async (req, res) => {
   });
   if (!student) throw ApiError.notFound("Student not found");
 
+  const studentClass = await Class.findByPk(student.classId);
+  if (studentClass) await assertCurrentYear(studentClass.academicYearId, req.schoolId);
+
   const markCount = await Mark.count({ where: { studentId: student.id } });
   if (markCount > 0) {
     throw ApiError.conflict(
@@ -91,6 +127,27 @@ const deleteStudent = asyncHandler(async (req, res) => {
   res.json({ message: "Student deleted" });
 });
 
+// Resolves a class's roster via StudentEnrollment (the historically-correct
+// source), falling back to a live classId match for any student that
+// predates enrollment-tracking so nothing already in the database goes
+// missing. Since a class only ever belongs to one academic year, this
+// naturally gives the right roster whether the class is the current year's
+// or an archived one.
+async function getClassRoster(classId) {
+  const [enrollments, liveStudents] = await Promise.all([
+    StudentEnrollment.findAll({ where: { classId }, include: [Student] }),
+    Student.findAll({ where: { classId } }),
+  ]);
+  const byId = new Map();
+  enrollments.forEach((e) => {
+    if (e.Student) byId.set(e.Student.id, e.Student);
+  });
+  liveStudents.forEach((s) => {
+    if (!byId.has(s.id)) byId.set(s.id, s);
+  });
+  return [...byId.values()].sort((a, b) => a.firstName.localeCompare(b.firstName));
+}
+
 // GET /api/classes/:id/students
 const listStudentsByClass = asyncHandler(async (req, res) => {
   const klass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
@@ -99,10 +156,7 @@ const listStudentsByClass = asyncHandler(async (req, res) => {
     throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
   }
 
-  const students = await Student.findAll({
-    where: { classId: req.params.id },
-    order: [["firstName", "ASC"]],
-  });
+  const students = await getClassRoster(req.params.id);
 
   res.json({ students });
 });
@@ -117,11 +171,9 @@ const getClassStudentListPdf = asyncHandler(async (req, res) => {
   if (!klass) throw ApiError.notFound("Class not found");
 
   const school = await School.findByPk(req.schoolId);
+  const academicYear = await AcademicYear.findByPk(klass.academicYearId);
 
-  const students = await Student.findAll({
-    where: { classId: req.params.id },
-    order: [["firstName", "ASC"]],
-  });
+  const students = await getClassRoster(req.params.id);
 
   const rows = students.map((s) => ({
     admissionNumber: s.admissionNumber,
@@ -135,6 +187,7 @@ const getClassStudentListPdf = asyncHandler(async (req, res) => {
   const pdfBuffer = await generateStudentListPdf(
     {
       className: klass.name,
+      academicYearName: academicYear ? academicYear.name : null,
       classTeacherName: klass.classTeacher?.name || null,
       schoolPhone: school.phone,
       schoolEmail: school.email,
@@ -152,23 +205,25 @@ const getClassStudentListPdf = asyncHandler(async (req, res) => {
   res.send(pdfBuffer);
 });
 
-// GET /api/students/roster/pdf?classId=&gender=all|M|F — the "Get Student
-// List" button on the manager's Statistics page. Unlike
+// GET /api/students/roster/pdf?classId=&gender=all|M|F&academicYearId= — the
+// "Get Student List" button on the manager's Statistics page. Unlike
 // getClassStudentListPdf (a per-class guardian-contact sheet), this covers
 // either one class or the whole school, can be narrowed to boys/girls/all,
-// and deliberately leaves guardian details off the page.
+// and deliberately leaves guardian details off the page. ?academicYearId
+// lets a manager pull the list for an archived year (same convention as
+// /statistics); it's ignored when a specific classId is given, since a
+// class already belongs to exactly one year.
 const getStudentRosterPdf = asyncHandler(async (req, res) => {
-  const { classId, gender } = req.query;
+  const { classId, gender, academicYearId } = req.query;
   const genderFilter = ["M", "F"].includes(gender) ? gender : "all";
 
   const school = await School.findByPk(req.schoolId);
 
-  const where = { schoolId: req.schoolId, status: "active" };
-  if (genderFilter !== "all") where.sex = genderFilter;
-
   let className = null;
   let classTeacherName = null;
+  let academicYear = null;
 
+  let students;
   if (classId) {
     const klass = await Class.findOne({
       where: { id: classId, schoolId: req.schoolId },
@@ -177,14 +232,26 @@ const getStudentRosterPdf = asyncHandler(async (req, res) => {
     if (!klass) throw ApiError.notFound("Class not found");
     className = klass.name;
     classTeacherName = klass.classTeacher?.name || null;
-    where.classId = classId;
-  }
+    academicYear = await AcademicYear.findByPk(klass.academicYearId);
 
-  const students = await Student.findAll({
-    where,
-    include: classId ? [] : [Class],
-    order: [["firstName", "ASC"]],
-  });
+    students = (await getClassRoster(classId)).filter(
+      (s) => s.status === "active" && (genderFilter === "all" || s.sex === genderFilter)
+    );
+  } else {
+    academicYear = academicYearId
+      ? await AcademicYear.findOne({ where: { id: academicYearId, schoolId: req.schoolId } })
+      : await getCurrentAcademicYear(req.schoolId);
+    if (!academicYear) throw ApiError.badRequest("Invalid or missing academicYearId for this school");
+
+    const where = { schoolId: req.schoolId, status: "active" };
+    if (genderFilter !== "all") where.sex = genderFilter;
+
+    students = await Student.findAll({
+      where,
+      include: [{ model: Class, where: { academicYearId: academicYear.id }, required: true }],
+    });
+  }
+  students = students.slice().sort((a, b) => a.firstName.localeCompare(b.firstName));
 
   const rows = students.map((s) => ({
     admissionNumber: s.admissionNumber,
@@ -200,6 +267,7 @@ const getStudentRosterPdf = asyncHandler(async (req, res) => {
     {
       scope: classId ? "class" : "school",
       className,
+      academicYearName: academicYear ? academicYear.name : null,
       classTeacherName,
       genderLabel,
       schoolPhone: school.phone,
