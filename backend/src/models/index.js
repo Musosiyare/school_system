@@ -10,6 +10,7 @@ const Student = require("./Student");
 const StudentEnrollment = require("./StudentEnrollment");
 const Term = require("./Term");
 const Mark = require("./Mark");
+const ClassModuleTermStatus = require("./ClassModuleTermStatus");
 const ReportRemark = require("./ReportRemark");
 const Notification = require("./Notification");
 const SystemSetting = require("./SystemSetting");
@@ -74,6 +75,18 @@ Mark.belongsTo(Term, { foreignKey: "termId" });
 Class.hasMany(Mark, { foreignKey: "classId" });
 Mark.belongsTo(Class, { foreignKey: "classId" });
 
+// Per class+module+term "disabled" flag — a module a class was never
+// examined on in a given term, excluded from that term's reports/averages
+// only (see reportService.buildStudentReport and markController.saveMarkEntries).
+Class.hasMany(ClassModuleTermStatus, { foreignKey: "classId" });
+ClassModuleTermStatus.belongsTo(Class, { foreignKey: "classId" });
+
+Module.hasMany(ClassModuleTermStatus, { foreignKey: "moduleId" });
+ClassModuleTermStatus.belongsTo(Module, { foreignKey: "moduleId" });
+
+Term.hasMany(ClassModuleTermStatus, { foreignKey: "termId" });
+ClassModuleTermStatus.belongsTo(Term, { foreignKey: "termId" });
+
 // Student enrollments — one row per student per academic year, recording
 // which class they belonged to that year. Source of truth for historical
 // rosters/reports; Student.classId remains the live/current pointer.
@@ -129,6 +142,7 @@ module.exports = {
   StudentEnrollment,
   Term,
   Mark,
+  ClassModuleTermStatus,
   ReportRemark,
   Notification,
   SystemSetting,

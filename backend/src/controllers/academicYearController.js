@@ -92,7 +92,10 @@ const createAcademicYear = asyncHandler(async (req, res) => {
 const listAcademicYears = asyncHandler(async (req, res) => {
   const wantsAll = req.query.all === "true";
 
-  if (wantsAll && req.user.role !== "manager") {
+  // Managers get the full history to manage it. Class teachers may also
+  // browse the full history, but strictly read-only — they use it to look
+  // back at old classes/reports, never to create/rename/switch years.
+  if (wantsAll && !["manager", "teacher"].includes(req.user.role)) {
     throw ApiError.forbidden("Only a school manager can view the full academic year history");
   }
 

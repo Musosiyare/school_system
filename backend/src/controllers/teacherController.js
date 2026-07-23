@@ -123,6 +123,48 @@ const resetTeacherPassword = asyncHandler(async (req, res) => {
   });
 });
 
+// PATCH /api/teachers/:id — a manager edits a teacher's name, email, or phone.
+// Password/status/deletion have their own dedicated endpoints, so this only
+// ever touches these three profile fields.
+const updateTeacher = asyncHandler(async (req, res) => {
+  const { name, email, phone } = req.body;
+  if (!name || !email) throw ApiError.badRequest("name and email are required");
+
+  const teacher = await User.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+  });
+  if (!teacher) throw ApiError.notFound("Teacher not found");
+
+  if (email !== teacher.email) {
+    const existing = await User.findOne({ where: { email } });
+    if (existing) throw ApiError.conflict("A user with this email already exists");
+  }
+
+  teacher.name = name;
+  teacher.email = email;
+  teacher.phone = phone || null;
+  await teacher.save();
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "teacher.updated",
+    description: `Updated details for teacher ${teacher.name}`,
+    entityType: "teacher",
+    entityId: teacher.id,
+  });
+
+  res.json({
+    teacher: {
+      id: teacher.id,
+      name: teacher.name,
+      email: teacher.email,
+      phone: teacher.phone,
+      status: teacher.status,
+    },
+  });
+});
+
 // DELETE /api/teachers/:id — a manager permanently removes a teacher account.
 // Blocked if the teacher has recorded any marks: those marks are graded work
 // tied to real students and terms, and deleting the teacher out from under
@@ -210,6 +252,7 @@ module.exports = {
   listTeachers,
   getTeacherTempPassword,
   resetTeacherPassword,
+  updateTeacher,
   updateTeacherStatus,
   deleteTeacher,
 };

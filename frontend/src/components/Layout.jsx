@@ -28,6 +28,8 @@ import {
   PanelLeftOpen,
   Wrench,
   History,
+  CalendarClock,
+  SlidersHorizontal,
 } from "lucide-react";
 
 const ROLE_META = {
@@ -62,7 +64,9 @@ const NAV = {
     { to: "/teacher", label: "Dashboard", icon: LayoutDashboard },
     { to: "/teacher/marks", label: "Record Marks", icon: PencilLine },
     { to: "/teacher/marks-status", label: "Marks Status", icon: BellRing },
+    { to: "/teacher/module-status", label: "Module Status", icon: SlidersHorizontal },
     { to: "/teacher/reports", label: "Reports", icon: FileText },
+    { to: "/teacher/past-years", label: "Past Years", icon: CalendarClock },
     { to: "/teacher/activity", label: "Activity", icon: History },
     { to: "/teacher/profile", label: "Profile", icon: UserCog },
   ],
@@ -120,7 +124,17 @@ const PAGE_META = {
     subtitle: "Who hasn't finished recording marks yet.",
     icon: BellRing,
   },
+  "/teacher/module-status": {
+    title: "Module Status",
+    subtitle: "Switch a module on or off for a specific term.",
+    icon: SlidersHorizontal,
+  },
   "/teacher/reports": { title: "Reports", subtitle: "Class rankings and report cards.", icon: FileText },
+  "/teacher/past-years": {
+    title: "Past Years",
+    subtitle: "Browse an old academic year — read-only.",
+    icon: CalendarClock,
+  },
   "/teacher/profile": { title: "Profile", subtitle: "Manage your account settings.", icon: UserCog },
   "/teacher/activity": {
     title: "Activity Log",

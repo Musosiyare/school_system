@@ -32,6 +32,8 @@ import MarksEntry from "./pages/teacher/MarksEntry";
 import MarksStatus from "./pages/teacher/MarksStatus";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherProfile from "./pages/teacher/TeacherProfile";
+import PastYears from "./pages/teacher/PastYears";
+import ModuleStatus from "./pages/teacher/ModuleStatus";
 
 export default function App() {
   return (
@@ -188,10 +190,26 @@ export default function App() {
               }
             />
             <Route
+              path="/teacher/module-status"
+              element={
+                <ProtectedRoute roles={["teacher"]}>
+                  <ModuleStatus />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/teacher/reports"
               element={
                 <ProtectedRoute roles={["teacher"]}>
                   <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/teacher/past-years"
+              element={
+                <ProtectedRoute roles={["teacher"]}>
+                  <PastYears />
                 </ProtectedRoute>
               }
             />

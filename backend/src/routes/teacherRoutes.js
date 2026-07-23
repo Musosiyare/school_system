@@ -4,6 +4,7 @@ const {
   listTeachers,
   getTeacherTempPassword,
   resetTeacherPassword,
+  updateTeacher,
   updateTeacherStatus,
   deleteTeacher,
 } = require("../controllers/teacherController");
@@ -14,6 +15,7 @@ router.use(authenticate, scopeToSchool);
 
 router.post("/", authorize("manager"), createTeacher);
 router.get("/", authorize("manager"), listTeachers);
+router.patch("/:id", authorize("manager"), updateTeacher);
 router.get("/:id/temp-password", authorize("manager"), getTeacherTempPassword);
 // Kept as a fallback for when a teacher has already changed their password
 // and forgotten the new one (temp-password recovery no longer applies then).

@@ -28,6 +28,7 @@ import {
   User,
   Mail,
   Phone,
+  Pencil,
 } from "lucide-react";
 
 const emptyForm = { name: "", email: "", phone: "" };
@@ -38,6 +39,10 @@ export default function Teachers() {
   const [assignments, setAssignments] = useState([]);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [editModal, setEditModal] = useState(null); // teacher being edited
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editError, setEditError] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
   const [credentialsModal, setCredentialsModal] = useState(null);
   const [assignmentsModal, setAssignmentsModal] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null); // teacher being considered for deletion
@@ -157,6 +162,32 @@ export default function Teachers() {
       await load();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  function openEditModal(teacher) {
+    setEditForm({ name: teacher.name || "", email: teacher.email || "", phone: teacher.phone || "" });
+    setEditError("");
+    setEditModal(teacher);
+  }
+
+  function updateEditField(field, value) {
+    setEditForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault();
+    if (!editModal) return;
+    setEditError("");
+    setEditSaving(true);
+    try {
+      await api.patch(`/teachers/${editModal.id}`, editForm);
+      setEditModal(null);
+      await load();
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -316,6 +347,14 @@ export default function Teachers() {
                     <div className="flex justify-end gap-2">
                       <Button
                         size="sm"
+                        variant="ghost"
+                        onClick={() => openEditModal(t)}
+                        title="Edit teacher"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
                         variant={t.status === "active" ? "danger" : "primary"}
                         onClick={() => handleToggleStatus(t)}
                         title={t.status === "active" ? "Deactivate" : "Activate"}
@@ -405,6 +444,63 @@ export default function Teachers() {
             </div>
           </Field>
           <ErrorText>{error}</ErrorText>
+        </form>
+      </Modal>
+
+      <Modal
+        open={!!editModal}
+        onClose={() => setEditModal(null)}
+        title="Edit Teacher"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditModal(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdate} disabled={editSaving}>
+              {editSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </>
+        }
+      >
+        <form noValidate onSubmit={handleUpdate} className="space-y-5">
+          <Field label="Full Name">
+            <div className="relative">
+              <User size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={editForm.name}
+                onChange={(e) => updateEditField("name", e.target.value)}
+                placeholder="e.g. Jane Uwimana"
+                className="pl-9"
+                required
+                autoFocus
+              />
+            </div>
+          </Field>
+          <Field label="Email">
+            <div className="relative">
+              <Mail size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => updateEditField("email", e.target.value)}
+                placeholder="teacher@school.com"
+                className="pl-9"
+                required
+              />
+            </div>
+          </Field>
+          <Field label="Phone">
+            <div className="relative">
+              <Phone size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={editForm.phone}
+                onChange={(e) => updateEditField("phone", e.target.value)}
+                placeholder="Optional"
+                className="pl-9"
+              />
+            </div>
+          </Field>
+          <ErrorText>{editError}</ErrorText>
         </form>
       </Modal>
 

@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const {
   createClass,
+  cloneClass,
   listClasses,
   getClass,
   deleteClass,
@@ -13,11 +14,13 @@ const {
 } = require("../controllers/classController");
 const { listStudentsByClass, createStudent, getClassStudentListPdf } = require("../controllers/studentController");
 const { getClassReport, getClassReportPdf } = require("../controllers/reportController");
+const { listModuleStatus, setModuleStatus } = require("../controllers/moduleStatusController");
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
 
 router.use(authenticate, scopeToSchool);
 
 router.post("/", authorize("manager"), createClass);
+router.post("/:id/clone", authorize("manager"), cloneClass);
 router.get("/", authorize("manager", "teacher"), listClasses);
 router.get("/:id", authorize("manager", "teacher"), getClass);
 router.delete("/:id", authorize("manager"), deleteClass);
@@ -34,5 +37,12 @@ router.get("/:id/students/pdf", authorize("manager"), getClassStudentListPdf);
 
 router.get("/:classId/term/:termId/report", authorize("manager", "teacher"), getClassReport);
 router.get("/:classId/term/:termId/report/pdf", authorize("manager", "teacher"), getClassReportPdf);
+
+router.get("/:classId/term/:termId/module-status", authorize("manager", "teacher"), listModuleStatus);
+router.patch(
+  "/:classId/modules/:moduleId/term/:termId/status",
+  authorize("manager", "teacher"),
+  setModuleStatus
+);
 
 module.exports = router;

@@ -10,6 +10,7 @@ const {
   ReportRemark,
   User,
   TeacherModuleAssignment,
+  ClassModuleTermStatus,
 } = require("../models");
 
 // Resolves the class a student actually belonged to during a given
@@ -50,6 +51,18 @@ async function buildStudentReport(studentId, termId) {
     include: [Module],
   });
 
+  // A module the assigned teacher (or manager) has marked "disabled" for
+  // this specific term — e.g. it was never actually taught/tested this
+  // term — is dropped entirely: it won't appear as a row on the report and
+  // its weight never enters the weighted-average calculation below. Only
+  // this one class+module+term combination is affected; every other term
+  // (and every other class this module is taught in) is untouched.
+  const disabledStatuses = await ClassModuleTermStatus.findAll({
+    where: { classId: effectiveClassId, termId, disabled: true },
+  });
+  const disabledModuleIds = new Set(disabledStatuses.map((s) => s.moduleId));
+  const activeClassModules = classModules.filter((cm) => !disabledModuleIds.has(cm.moduleId));
+
   const marks = await Mark.findAll({
     where: { studentId, termId },
   });
@@ -76,7 +89,7 @@ async function buildStudentReport(studentId, termId) {
   let weightedPassSum = 0;
   let weightSum = 0;
 
-  const modules = classModules.map((cm) => {
+  const modules = activeClassModules.map((cm) => {
     const mod = cm.Module;
     const markRow = marksByModule[mod.id];
     const score = markRow ? markRow.score : null;

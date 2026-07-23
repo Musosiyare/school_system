@@ -1,5 +1,5 @@
 const ExcelJS = require("exceljs");
-const { Mark, TeacherModuleAssignment, Term, Module, Student, Class, School, User } = require("../models");
+const { Mark, TeacherModuleAssignment, Term, Module, Student, Class, School, User, ClassModuleTermStatus } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { assertCurrentYear } = require("../utils/academicYear");
@@ -40,6 +40,15 @@ async function saveMarkEntries({ classId, moduleId, termId, entries, userId, sch
 
   const module = await Module.findOne({ where: { id: moduleId, schoolId } });
   if (!module) throw ApiError.badRequest("Invalid moduleId for this school");
+
+  // If this module has been disabled for this specific class+term (e.g. it
+  // was never actually taught/tested this term), marks can't be recorded
+  // against it until it's re-enabled — otherwise a score could sit
+  // recorded while the report/weighted-average silently ignores it.
+  const moduleStatus = await ClassModuleTermStatus.findOne({
+    where: { classId, moduleId, termId, disabled: true },
+  });
+  if (moduleStatus) throw ApiError.moduleDisabled();
 
   // Validate every entry before writing anything (FR-4.3)
   entries.forEach((e, idx) => {

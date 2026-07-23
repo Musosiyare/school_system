@@ -24,6 +24,11 @@ class ApiError extends Error {
   static termLocked(message = "This term is locked") {
     return new ApiError(423, "TERM_LOCKED", message);
   }
+  static moduleDisabled(
+    message = "This module has been disabled for this term, so marks can't be recorded against it. Re-enable it first."
+  ) {
+    return new ApiError(423, "MODULE_DISABLED", message);
+  }
   static reportsDisabled(
     message = "Reports for this term are temporarily disabled. Please ask the head teacher to view it."
   ) {

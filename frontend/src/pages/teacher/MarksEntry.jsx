@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
+import Modal from "../../components/ui/Modal";
 import { Field, Input } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, ChevronDown } from "lucide-react";
+import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2 } from "lucide-react";
 
 // Custom dropdown for the Module/Class picker. A native <select> can't color
 // part of an option's text and leave the rest black — the whole <option> is
@@ -33,9 +35,16 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
 
   function statusLabel(status) {
     if (!status) return null;
+    if (status.disabled) return "⛔ Disabled this term";
     return status.completed
       ? "✓ Marks completed"
       : `⚠ Missing marks (${status.totalStudents - status.recordedCount}/${status.totalStudents})`;
+  }
+
+  function statusColor(status) {
+    if (!status) return undefined;
+    if (status.disabled) return "#b45309"; // amber — matches the Disabled badge elsewhere
+    return status.completed ? "#059669" : "#dc2626";
   }
 
   return (
@@ -53,7 +62,7 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
             {currentStatus && (
               <span
                 className="text-xs font-medium mt-0.5 truncate block"
-                style={{ color: currentStatus.completed ? "#059669" : "#dc2626" }}
+                style={{ color: statusColor(currentStatus) }}
               >
                 {statusLabel(currentStatus)}
               </span>
@@ -86,7 +95,7 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
                 {status && (
                   <span
                     className="text-xs font-medium mt-0.5 truncate block"
-                    style={{ color: status.completed ? "#059669" : "#dc2626" }}
+                    style={{ color: statusColor(status) }}
                   >
                     {statusLabel(status)}
                   </span>
@@ -102,6 +111,7 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
 
 export default function MarksEntry() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const confirm = useConfirm();
   const [assignments, setAssignments] = useState([]);
   const [years, setYears] = useState([]);
@@ -131,6 +141,12 @@ export default function MarksEntry() {
   const templateFileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [importWarnings, setImportWarnings] = useState([]);
+
+  // Drag-and-drop upload modal: open + whether a file is currently being
+  // dragged over the dropzone (for the hover highlight).
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // assignmentId -> { totalStudents, recordedCount, completed } for the
   // currently selected term. Powers the "Missing marks / Completed" status
@@ -169,6 +185,11 @@ export default function MarksEntry() {
   const allTerms = years.flatMap((y) => y.Terms || []);
   const currentTerm = allTerms.find((t) => String(t.id) === selectedTermId);
   const isTermLocked = !!currentTerm?.isLocked;
+  // Whether the currently selected module has been switched off for the
+  // currently selected term (toggled from the separate "Module Status"
+  // page) — a module a class was never actually taught/tested that term.
+  // This page only ever reflects that state; it can't change it here.
+  const moduleDisabled = !!(currentAssignment && assignmentStatuses[currentAssignment.id]?.disabled);
   // moduleWeight and maxScore are always the same value (weight doubles as
   // the ceiling for marks entry) — moduleWeight is the name shown to users.
   const maxScore = currentAssignment?.Module?.moduleWeight ?? currentAssignment?.Module?.maxScore;
@@ -277,12 +298,23 @@ export default function MarksEntry() {
     }
     try {
       const uniqueClassIds = [...new Set(assignments.map((a) => a.classId))];
-      const studentCountEntries = await Promise.all(
-        uniqueClassIds.map((classId) =>
-          api.get(`/classes/${classId}/students`).then((res) => [classId, res.data.students.length])
-        )
-      );
+      const [studentCountEntries, moduleStatusEntries] = await Promise.all([
+        Promise.all(
+          uniqueClassIds.map((classId) =>
+            api.get(`/classes/${classId}/students`).then((res) => [classId, res.data.students.length])
+          )
+        ),
+        Promise.all(
+          uniqueClassIds.map((classId) =>
+            api
+              .get(`/classes/${classId}/term/${termId}/module-status`)
+              .then((res) => [classId, res.data.modules])
+              .catch(() => [classId, []])
+          )
+        ),
+      ]);
       const studentCountByClass = Object.fromEntries(studentCountEntries);
+      const moduleStatusByClass = Object.fromEntries(moduleStatusEntries);
 
       const statusEntries = await Promise.all(
         assignments.map((a) =>
@@ -293,12 +325,16 @@ export default function MarksEntry() {
             .then((res) => {
               const totalStudents = studentCountByClass[a.classId] || 0;
               const recordedCount = res.data.marks.length;
+              const moduleStatus = (moduleStatusByClass[a.classId] || []).find(
+                (m) => m.moduleId === a.moduleId
+              );
               return [
                 a.id,
                 {
                   totalStudents,
                   recordedCount,
                   completed: totalStudents > 0 && recordedCount >= totalStudents,
+                  disabled: !!moduleStatus?.disabled,
                 },
               ];
             })
@@ -371,6 +407,10 @@ export default function MarksEntry() {
       setError("This term is locked — the school manager has closed it for editing.");
       return;
     }
+    if (moduleDisabled) {
+      setError("This module is disabled for this term. Re-enable it above before recording marks.");
+      return;
+    }
 
     const entries = students
       .filter((s) => scores[s.id] !== undefined && scores[s.id] !== "")
@@ -414,7 +454,7 @@ export default function MarksEntry() {
     }
   }
 
-  const fieldsDisabled = isTermLocked || !editMode || saving;
+  const fieldsDisabled = isTermLocked || moduleDisabled || !editMode || saving;
 
   function downloadEvidencePdf() {
     const token = localStorage.getItem("token");
@@ -461,18 +501,25 @@ export default function MarksEntry() {
     setError("");
     setSuccess("");
     setImportWarnings([]);
-    templateFileInputRef.current?.click();
+    setShowUploadModal(true);
   }
 
-  // Handles the file picked from triggerTemplateUpload: uploads it, then
-  // reflects whatever the server actually saved back into the on-screen
-  // table exactly as if those scores had been typed in by hand.
-  async function importTemplateFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file next time
+  // Shared entry point for a chosen file, regardless of whether it arrived
+  // via the "browse" click or a drag-and-drop onto the dropzone.
+  async function importTemplateFile(file) {
     if (!file) return;
     if (isTermLocked) {
       setError("This term is locked — the school manager has closed it for editing.");
+      setShowUploadModal(false);
+      return;
+    }
+    if (moduleDisabled) {
+      setError("This module is disabled for this term. Re-enable it above before importing marks.");
+      setShowUploadModal(false);
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setError("Please upload a .xlsx file — that's the format the downloaded template uses.");
       return;
     }
 
@@ -483,6 +530,7 @@ export default function MarksEntry() {
     });
     if (!ok) return;
 
+    setShowUploadModal(false);
     setError("");
     setSuccess("");
     setImportWarnings([]);
@@ -512,6 +560,46 @@ export default function MarksEntry() {
     } finally {
       setImporting(false);
     }
+  }
+
+  function handleTemplateInputChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file next time
+    importTemplateFile(file);
+  }
+
+  // Drag handlers use a counter because onDragLeave also fires when the
+  // pointer passes over a child element inside the dropzone, which would
+  // otherwise flicker the highlight off and on as the mouse moves.
+  function handleDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    setDropActive(true);
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setDropActive(false);
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setDropActive(false);
+    const file = e.dataTransfer.files?.[0];
+    importTemplateFile(file);
   }
 
   return (
@@ -582,7 +670,28 @@ export default function MarksEntry() {
         )}
       </Card>
 
-      {currentAssignment && selectedTermId && (
+      {currentAssignment && selectedTermId && moduleDisabled && (
+        <Card>
+          <div className="flex flex-col items-center text-center gap-3 py-12 px-6">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <PowerOff size={26} />
+            </div>
+            <h3 className="text-base font-semibold text-slate-800">
+              {currentAssignment.Module?.moduleTitle} is disabled for {currentTerm?.name}
+            </h3>
+            <p className="text-sm text-slate-500 max-w-md">
+              It's been switched off for this specific term — it won't appear on{" "}
+              {currentAssignment.Class?.name}'s report cards and won't count toward students'
+              weighted average. Marks can't be recorded here until it's re-enabled.
+            </p>
+            <Button onClick={() => navigate("/teacher/module-status")}>
+              <SlidersHorizontal size={14} /> Go to Module Status
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {currentAssignment && selectedTermId && !moduleDisabled && (
         <Card
           title={`Marks — ${currentAssignment.Module?.moduleTitle} (${currentAssignment.Class?.name})`}
           subtitle={`Module weight / max score: ${maxScore}`}
@@ -599,13 +708,6 @@ export default function MarksEntry() {
               </Button>
               {!isTermLocked && (
                 <>
-                  <input
-                    ref={templateFileInputRef}
-                    type="file"
-                    accept=".xlsx"
-                    className="hidden"
-                    onChange={importTemplateFile}
-                  />
                   {/* Same protection as the marks table itself: once marks are
                       already saved, uploading a template is disabled until
                       the teacher explicitly clicks "Edit Marks" — otherwise a
@@ -823,6 +925,59 @@ export default function MarksEntry() {
           </form>
         </Card>
       )}
+
+      <Modal
+        open={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        title="Upload Filled Template"
+        size="md"
+      >
+        <p className="text-sm text-slate-500 mb-4">
+          Import scores for {currentAssignment?.Module?.moduleTitle} — {currentAssignment?.Class?.name},{" "}
+          {currentTerm?.name}.
+        </p>
+        <input
+          ref={templateFileInputRef}
+          type="file"
+          accept=".xlsx"
+          className="hidden"
+          onChange={handleTemplateInputChange}
+        />
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onClick={() => templateFileInputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") templateFileInputRef.current?.click();
+          }}
+          className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center cursor-pointer transition ${
+            dropActive
+              ? "border-brand-400 bg-brand-50"
+              : "border-slate-300 bg-slate-50 hover:border-brand-300 hover:bg-brand-50/50"
+          }`}
+        >
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
+              dropActive ? "bg-brand-100 text-brand-600" : "bg-white text-slate-400 border border-slate-200"
+            }`}
+          >
+            {dropActive ? <FileCheck2 size={22} /> : <UploadCloud size={22} />}
+          </div>
+          <p className="text-sm font-medium text-slate-700">
+            {dropActive ? "Drop the file to upload" : "Drag and drop the filled template here"}
+          </p>
+          <p className="text-xs text-slate-400">
+            or <span className="text-brand-600 font-medium">browse</span> for a .xlsx file
+          </p>
+        </div>
+        <p className="text-xs text-slate-400 mt-3">
+          Don't have a template yet? Close this and click "Download Template" first.
+        </p>
+      </Modal>
     </div>
   );
 }

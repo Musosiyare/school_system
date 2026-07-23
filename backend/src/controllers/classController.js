@@ -56,6 +56,78 @@ const createClass = asyncHandler(async (req, res) => {
   res.status(201).json({ class: klass });
 });
 
+// POST /api/classes/:id/clone — used from the pull-students screen when the
+// destination year doesn't have a matching class yet (e.g. no "S2A" exists
+// in 2026-2027 the first time L3 students are pulled into L4). Creates a new
+// class in destAcademicYearId with the same category and module list as the
+// source class, so students land somewhere already set up with the right
+// subjects. The source class itself is never touched — this only adds a new
+// class, same as the pull/promotion step only ever adds new records.
+const cloneClass = asyncHandler(async (req, res) => {
+  const { destAcademicYearId, name } = req.body;
+  if (!destAcademicYearId) throw ApiError.badRequest("destAcademicYearId is required");
+
+  const sourceClass = await Class.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  if (!sourceClass) throw ApiError.notFound("Class not found");
+
+  const destYear = await AcademicYear.findOne({
+    where: { id: destAcademicYearId, schoolId: req.schoolId },
+  });
+  if (!destYear) throw ApiError.badRequest("Invalid destAcademicYearId for this school");
+  if (Number(destYear.id) === Number(sourceClass.academicYearId)) {
+    throw ApiError.badRequest("destAcademicYearId must be different from the source class's year");
+  }
+  // Classes are only ever created in the current year (same rule as
+  // createClass) — cloning into an archived year would silently mutate it.
+  await assertCurrentYear(destYear.id, req.schoolId);
+
+  const newName = (name && name.trim()) || sourceClass.name;
+
+  const duplicate = await Class.findOne({
+    where: { schoolId: req.schoolId, academicYearId: destYear.id, name: newName },
+  });
+  if (duplicate) {
+    throw ApiError.conflict(
+      `A class named "${newName}" already exists in ${destYear.name}.`,
+      "DUPLICATE_CLASS_NAME"
+    );
+  }
+
+  const sourceModules = await ClassModule.findAll({ where: { classId: sourceClass.id } });
+
+  const newClass = await sequelize.transaction(async (t) => {
+    const created = await Class.create(
+      {
+        schoolId: req.schoolId,
+        academicYearId: destYear.id,
+        name: newName,
+        category: sourceClass.category,
+      },
+      { transaction: t }
+    );
+
+    if (sourceModules.length > 0) {
+      await ClassModule.bulkCreate(
+        sourceModules.map((cm) => ({ classId: created.id, moduleId: cm.moduleId })),
+        { transaction: t }
+      );
+    }
+
+    return created;
+  });
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "class.created",
+    description: `Cloned class ${sourceClass.name} into ${destYear.name} as ${newClass.name}`,
+    entityType: "class",
+    entityId: newClass.id,
+  });
+
+  res.status(201).json({ class: newClass });
+});
+
 // PATCH /api/classes/:id/name — rename a class. Only the current year's
 // classes can be renamed (same rule as everything else that changes a
 // class), and a duplicate name within the same academic year is rejected
@@ -131,7 +203,11 @@ const listClasses = asyncHandler(async (req, res) => {
   const where = { schoolId: req.schoolId };
   if (!wantsAll) {
     let academicYearId = req.query.academicYearId;
-    if (academicYearId && req.user.role !== "manager") {
+    // A teacher may look up a specific past year's classes (read-only —
+    // they only ever see their own class in there, and nothing here lets
+    // them write). Only the "every year at once" wildcard above stays
+    // manager-only.
+    if (academicYearId && !["manager", "teacher"].includes(req.user.role)) {
       throw ApiError.forbidden("Only a school manager can view a past academic year");
     }
     if (!academicYearId) {
@@ -402,6 +478,7 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
 
 module.exports = {
   createClass,
+  cloneClass,
   listClasses,
   getClass,
   deleteClass,
