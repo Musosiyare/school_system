@@ -51,19 +51,21 @@ export default function MaintenanceBanner() {
     }
 
     return (
-      <div className="flex flex-wrap items-center gap-3 bg-amber-500 text-white px-4 sm:px-6 lg:px-8 py-2 text-sm font-medium">
-        <AlertTriangle size={16} className="shrink-0" />
-        <span className="flex-1 min-w-0">
-          Maintenance mode is ON — every manager and teacher is currently locked out.
-        </span>
-        <button
-          onClick={turnOff}
-          disabled={turningOff}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-xs font-semibold transition-colors disabled:opacity-60"
-        >
-          <Power size={13} />
-          {turningOff ? "Turning off..." : "Turn it off now"}
-        </button>
+      <div className="px-4 sm:px-6 lg:px-8 pt-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-amber-500 text-white shadow-sm px-4 py-2.5 text-xs font-medium">
+          <AlertTriangle size={15} className="shrink-0" />
+          <span className="flex-1 min-w-0">
+            Maintenance mode is ON — every manager and teacher is currently locked out.
+          </span>
+          <button
+            onClick={turnOff}
+            disabled={turningOff}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-white/15 hover:bg-white/25 px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-60"
+          >
+            <Power size={12} />
+            {turningOff ? "Turning off..." : "Turn it off now"}
+          </button>
+        </div>
       </div>
     );
   }
@@ -72,34 +74,38 @@ export default function MaintenanceBanner() {
 
   if (isSuperuser) {
     return (
-      <div className="flex flex-wrap items-center gap-3 bg-violet-50 border-b border-violet-100 text-violet-700 px-4 sm:px-6 lg:px-8 py-2 text-sm">
-        <CalendarClock size={16} className="shrink-0" />
-        <span className="flex-1 min-w-0">
-          Maintenance is planned to start on {formatWhen(scheduledAt)} — remember to switch it on yourself when the time comes.
-        </span>
-        <button
-          onClick={() => setDismissed(true)}
-          className="shrink-0 text-xs font-medium text-violet-500 hover:text-violet-700"
-        >
-          Dismiss
-        </button>
+      <div className="px-4 sm:px-6 lg:px-8 pt-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-violet-50 border border-violet-100 text-violet-700 shadow-sm px-4 py-2.5 text-xs">
+          <CalendarClock size={15} className="shrink-0" />
+          <span className="flex-1 min-w-0">
+            Maintenance is planned to start on {formatWhen(scheduledAt)} — remember to switch it on yourself when the time comes.
+          </span>
+          <button
+            onClick={() => setDismissed(true)}
+            className="shrink-0 text-xs font-medium text-violet-500 hover:text-violet-700"
+          >
+            Dismiss
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 bg-amber-50 border-b border-amber-100 text-amber-800 px-4 sm:px-6 lg:px-8 py-2 text-sm">
-      <CalendarClock size={16} className="shrink-0" />
-      <span className="flex-1 min-w-0">
-        <span className="font-medium">Upcoming maintenance:</span> the system is expected to go
-        offline starting {formatWhen(scheduledAt)}.{scheduleAnnouncement ? ` ${scheduleAnnouncement}` : ""}
-      </span>
-      <button
-        onClick={() => setDismissed(true)}
-        className="shrink-0 text-xs font-medium text-amber-600 hover:text-amber-800"
-      >
-        Dismiss
-      </button>
+    <div className="px-4 sm:px-6 lg:px-8 pt-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 shadow-sm px-4 py-2.5 text-xs">
+        <CalendarClock size={15} className="shrink-0" />
+        <span className="flex-1 min-w-0">
+          <span className="font-medium">Upcoming maintenance:</span> the system is expected to go
+          offline starting {formatWhen(scheduledAt)}.{scheduleAnnouncement ? ` ${scheduleAnnouncement}` : ""}
+        </span>
+        <button
+          onClick={() => setDismissed(true)}
+          className="shrink-0 text-xs font-medium text-amber-600 hover:text-amber-800"
+        >
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }

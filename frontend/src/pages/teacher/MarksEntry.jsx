@@ -10,7 +10,33 @@ import { Field, Input } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2 } from "lucide-react";
+import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2, Check } from "lucide-react";
+
+// Small fixed palette for the student initials avatar. Colors are picked
+// deterministically from the student's name (not randomly, not by row
+// position) so the same student always lands on the same color across
+// reloads and re-sorts, while different students visually stand apart in a
+// long list — e.g. "Mukiza Paul" always gets the same "MP" color.
+const AVATAR_PALETTE = [
+  { bg: "bg-brand-100", text: "text-brand-700" },
+  { bg: "bg-teal-100", text: "text-teal-700" },
+  { bg: "bg-violet-100", text: "text-violet-700" },
+  { bg: "bg-amber-100", text: "text-amber-700" },
+  { bg: "bg-rose-100", text: "text-rose-700" },
+  { bg: "bg-sky-100", text: "text-sky-700" },
+  { bg: "bg-emerald-100", text: "text-emerald-700" },
+  { bg: "bg-fuchsia-100", text: "text-fuchsia-700" },
+  { bg: "bg-orange-100", text: "text-orange-700" },
+  { bg: "bg-indigo-100", text: "text-indigo-700" },
+];
+
+function avatarColorFor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
 
 // Custom dropdown for the Module/Class picker. A native <select> can't color
 // part of an option's text and leave the rest black — the whole <option> is
@@ -18,7 +44,7 @@ import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreads
 // black and only the "Missing marks / Completed" status to be colored
 // (red/green), this renders its own list so each option can mix a black
 // segment and a colored segment.
-function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) {
+function AssignmentSelect({ assignments, assignmentStatuses, value, onChange, hideStatus }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -31,7 +57,7 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
   }, []);
 
   const current = assignments.find((a) => String(a.id) === value);
-  const currentStatus = current ? assignmentStatuses[current.id] : null;
+  const currentStatus = current && !hideStatus ? assignmentStatuses[current.id] : null;
 
   function statusLabel(status) {
     if (!status) return null;
@@ -76,7 +102,7 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
       {open && (
         <div className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg py-1">
           {assignments.map((a) => {
-            const status = assignmentStatuses[a.id];
+            const status = hideStatus ? null : assignmentStatuses[a.id];
             return (
               <button
                 key={a.id}
@@ -138,6 +164,10 @@ export default function MarksEntry() {
   const [saving, setSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState("all"); // "all" | "recorded" | "pending" | "pass" | "fail"
   const tableRef = useRef(null);
+  // One input element per student, keyed by studentId, so pressing Enter in
+  // a score field can move focus straight to the next row's field instead of
+  // submitting the form.
+  const scoreInputRefs = useRef({});
   const templateFileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [importWarnings, setImportWarnings] = useState([]);
@@ -383,6 +413,22 @@ export default function MarksEntry() {
     setFieldErrors((e) => ({ ...e, [studentId]: message }));
   }
 
+  // Enter used to submit the whole form (native browser behavior for an
+  // input inside a form with a submit button). Recording marks is a
+  // row-by-row task, so Enter should instead just move down to the next
+  // student's field — like tabbing through a spreadsheet.
+  function handleScoreKeyDown(e, studentId) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const idx = filteredStudents.findIndex((s) => s.id === studentId);
+    const next = filteredStudents[idx + 1];
+    if (next) {
+      scoreInputRefs.current[next.id]?.focus();
+    } else {
+      e.target.blur();
+    }
+  }
+
   function startEdit() {
     setEditMode(true);
     setSuccess("");
@@ -437,7 +483,8 @@ export default function MarksEntry() {
         entries,
       });
       const byStudent = Object.fromEntries(entries.map((e) => [e.studentId, String(e.score)]));
-      setSavedScores((prev) => ({ ...prev, ...byStudent }));
+      const newSavedScores = { ...savedScores, ...byStudent };
+      setSavedScores(newSavedScores);
       setSuccess(`Saved ${entries.length} score(s) successfully.`);
       setFieldErrors({});
       // Lock the fields again now that these marks are recorded — matches
@@ -612,8 +659,9 @@ export default function MarksEntry() {
               assignmentStatuses={assignmentStatuses}
               value={selectedAssignment}
               onChange={setSelectedAssignment}
+              hideStatus={isTermLocked}
             />
-            {selectedTermId && (
+            {selectedTermId && !isTermLocked && (
               <span className="text-xs text-slate-400">
                 Status shown is for the selected term below.
               </span>
@@ -691,7 +739,24 @@ export default function MarksEntry() {
         </Card>
       )}
 
-      {currentAssignment && selectedTermId && !moduleDisabled && (
+      {currentAssignment && selectedTermId && !moduleDisabled && isTermLocked && (
+        <Card>
+          <div className="flex flex-col items-center text-center gap-3 py-12 px-6">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <Lock size={26} />
+            </div>
+            <h3 className="text-base font-semibold text-slate-800">
+              {currentTerm?.name} is locked
+            </h3>
+            <p className="text-sm text-slate-500 max-w-md">
+              The school manager has closed this term for editing, so scores can't be entered or
+              changed here right now.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {currentAssignment && selectedTermId && !moduleDisabled && !isTermLocked && (
         <Card
           title={`Marks — ${currentAssignment.Module?.moduleTitle} (${currentAssignment.Class?.name})`}
           subtitle={`Module weight / max score: ${maxScore}`}
@@ -704,32 +769,28 @@ export default function MarksEntry() {
                 className="w-full lg:w-auto"
               >
                 <FileSpreadsheet size={14} />
-                <span className="hidden lg:inline">Download </span>Template
+                <span className="hidden lg:inline">Download Marks Template</span>
+                <span className="lg:hidden">Template</span>
               </Button>
-              {!isTermLocked && (
-                <>
-                  {/* Same protection as the marks table itself: once marks are
-                      already saved, uploading a template is disabled until
-                      the teacher explicitly clicks "Edit Marks" — otherwise a
-                      file could silently overwrite recorded scores. */}
-                  <Button
-                    size="sm"
-                    variant="violet"
-                    onClick={triggerTemplateUpload}
-                    disabled={fieldsDisabled || importing}
-                    title={
-                      hasSavedMarks && !editMode
-                        ? 'Marks are already recorded. Click "Edit Marks" to upload a new file.'
-                        : undefined
-                    }
-                    className="w-full lg:w-auto"
-                  >
-                    <Upload size={14} />
-                    <span className="hidden lg:inline">{importing ? "Importing..." : "Upload Filled Template"}</span>
-                    <span className="lg:hidden">{importing ? "Importing..." : "Upload"}</span>
-                  </Button>
-                </>
-              )}
+              {/* Same protection as the marks table itself: once marks are
+                  already saved, uploading a template is disabled until
+                  the teacher explicitly clicks "Edit Marks" — otherwise a
+                  file could silently overwrite recorded scores. */}
+              <Button
+                size="sm"
+                variant="violet"
+                onClick={triggerTemplateUpload}
+                disabled={fieldsDisabled || importing}
+                title={
+                  hasSavedMarks && !editMode
+                    ? 'Marks are already recorded. Click "Edit Marks" to upload a new file.'
+                    : undefined
+                }
+                className="w-full lg:w-auto"
+              >
+                <Upload size={14} />
+                {importing ? "Importing..." : "Upload Marks"}
+              </Button>
               <Button
                 size="sm"
                 variant="teal"
@@ -737,10 +798,9 @@ export default function MarksEntry() {
                 className="w-full lg:w-auto"
               >
                 <Download size={14} />
-                <span className="hidden lg:inline">Download </span>Evidence PDF
+                Mark Sheet
               </Button>
-              {!isTermLocked &&
-                hasSavedMarks &&
+              {hasSavedMarks &&
                 (editMode ? (
                   <Button size="sm" variant="ghost" onClick={cancelEdit} className="w-full lg:w-auto">
                     <X size={14} /> Cancel
@@ -753,15 +813,6 @@ export default function MarksEntry() {
             </div>
           }
         >
-          {isTermLocked && (
-            <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
-              <Lock size={16} className="text-red-600 shrink-0 mt-0.5" />
-              <span>
-                This term is locked. You can still see the class list below, but scores can't be
-                entered or changed until the school manager reopens it.
-              </span>
-            </div>
-          )}
           {importWarnings.length > 0 && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
               <p className="font-medium mb-1">Some rows in the uploaded file were skipped:</p>
@@ -772,7 +823,7 @@ export default function MarksEntry() {
               </ul>
             </div>
           )}
-          {!isTermLocked && hasSavedMarks && !editMode && (
+          {hasSavedMarks && !editMode && (
             <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600 flex items-center justify-between flex-wrap gap-2">
               <span>Marks for this module have already been recorded. Click "Edit Marks" to make changes.</span>
               <Badge tone="neutral">Read-only</Badge>
@@ -873,28 +924,72 @@ export default function MarksEntry() {
                       const numericValue = hasValue ? Number(raw) : null;
                       const passed =
                         hasValue && passingLine !== undefined ? numericValue >= passingLine : null;
+                      const avatarColor = avatarColorFor(`${s.firstName} ${s.lastName}`);
+                      // Once at least one mark has been saved for this
+                      // module/term, anyone still missing from savedScores
+                      // was skipped — this is derived straight from saved
+                      // state, so it's correct on first save, after a
+                      // reload, or after switching terms and back.
+                      const isSkipped = hasSavedMarks && savedScores[s.id] === undefined;
+                      const isRecorded = savedScores[s.id] !== undefined;
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/80">
                           <Td className="font-medium text-slate-800">
                             <div className="flex items-center gap-2.5">
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-xs font-semibold">
+                              <div
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${avatarColor.bg} ${avatarColor.text} text-xs font-semibold`}
+                              >
                                 {s.firstName?.[0]?.toUpperCase()}
                                 {s.lastName?.[0]?.toUpperCase()}
                               </div>
-                              {s.firstName} {s.lastName}
+                              <span className="inline-flex items-center gap-1.5">
+                                {s.firstName} {s.lastName}
+                                {isSkipped && (
+                                  <span className="group relative inline-flex shrink-0">
+                                    <span className="flex h-2 w-2 items-center justify-center rounded-full bg-amber-400 ring-2 ring-amber-100 cursor-default" />
+                                    <span className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block">
+                                      No mark recorded for this student
+                                    </span>
+                                  </span>
+                                )}
+                                {isRecorded && (
+                                  <span className="group relative inline-flex shrink-0">
+                                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-emerald-100 cursor-default">
+                                      <Check size={9} strokeWidth={3.5} className="text-white" />
+                                    </span>
+                                    <span className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block">
+                                      Mark recorded and saved
+                                    </span>
+                                  </span>
+                                )}
+                              </span>
                             </div>
                           </Td>
                           <Td>
                             <div className="flex flex-col gap-1">
-                              <Input
-                                type="number"
-                                min="0"
-                                max={maxScore}
-                                value={scores[s.id] ?? ""}
-                                onChange={(e) => updateScore(s.id, e.target.value)}
-                                disabled={fieldsDisabled}
-                                className="w-24"
-                              />
+                              <div className="relative w-24">
+                                <Input
+                                  ref={(el) => {
+                                    scoreInputRefs.current[s.id] = el;
+                                  }}
+                                  type="number"
+                                  min="0"
+                                  max={maxScore}
+                                  value={scores[s.id] ?? ""}
+                                  onChange={(e) => updateScore(s.id, e.target.value)}
+                                  onKeyDown={(e) => handleScoreKeyDown(e, s.id)}
+                                  disabled={fieldsDisabled}
+                                  className={`w-24 ${isSkipped && !hasValue ? "pl-8" : ""}`}
+                                />
+                                {/* Same unrecorded flag as next to the name, but
+                                    right on the field itself — typing a value
+                                    (even before saving) overrides/hides it, so
+                                    it only ever marks a field that's actually
+                                    still empty. */}
+                                {isSkipped && !hasValue && (
+                                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-amber-400 ring-2 ring-amber-100" />
+                                )}
+                              </div>
                               {fieldErrors[s.id] && (
                                 <span className="text-xs text-red-600">{fieldErrors[s.id]}</span>
                               )}
@@ -929,7 +1024,7 @@ export default function MarksEntry() {
       <Modal
         open={showUploadModal}
         onClose={() => setShowUploadModal(false)}
-        title="Upload Filled Template"
+        title="Upload Marks"
         size="md"
       >
         <p className="text-sm text-slate-500 mb-4">
@@ -975,7 +1070,7 @@ export default function MarksEntry() {
           </p>
         </div>
         <p className="text-xs text-slate-400 mt-3">
-          Don't have a template yet? Close this and click "Download Template" first.
+          Don't have a template yet? Close this and click "Download Marks Template" first.
         </p>
       </Modal>
     </div>

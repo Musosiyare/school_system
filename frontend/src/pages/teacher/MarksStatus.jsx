@@ -16,6 +16,7 @@ import {
   Lock,
   ChevronDown,
   UserCheck,
+  Megaphone,
 } from "lucide-react";
 
 // Builds one short, clean reminder that covers every outstanding module for
@@ -63,6 +64,10 @@ export default function MarksStatus() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [notifyMessage, setNotifyMessage] = useState("");
   const [sendingNotify, setSendingNotify] = useState(false);
+
+  // Which class is currently mid "Notify All" send, so its button can show a
+  // spinner/disabled state without affecting other classes.
+  const [bulkSendingClassId, setBulkSendingClassId] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -228,6 +233,53 @@ export default function MarksStatus() {
     }
   }
 
+  // Sends the same auto-built reminder used by the single "Notify" button to
+  // every subject teacher still outstanding for a class, in one click —
+  // skips a teacher already sent to unless the whole class is re-notified.
+  async function notifyAllForClass(classId, className, termName, teacherGroups) {
+    if (teacherGroups.length === 0) return;
+    setBulkSendingClassId(classId);
+    try {
+      const results = await Promise.allSettled(
+        teacherGroups.map((group) =>
+          api.post("/notifications", {
+            recipientId: group.teacherId,
+            classId,
+            termId: Number(selectedTermId),
+            message: buildReminderMessage(group.teacherName, className, termName, group.modules),
+          })
+        )
+      );
+
+      const succeededGroups = teacherGroups.filter((_, i) => results[i].status === "fulfilled");
+      const failedCount = results.length - succeededGroups.length;
+
+      if (succeededGroups.length > 0) {
+        setSentKeys((prev) => {
+          const next = new Set(prev);
+          succeededGroups.forEach((group) => next.add(`${classId}:${group.teacherId}`));
+          return next;
+        });
+      }
+
+      if (failedCount === 0) {
+        await notify({
+          title: "Reminders sent",
+          message: `Notified ${succeededGroups.length} teacher${succeededGroups.length === 1 ? "" : "s"} for ${className}.`,
+          tone: "info",
+        });
+      } else {
+        await notify({
+          title: "Some reminders failed",
+          message: `${succeededGroups.length} sent, ${failedCount} failed to send.`,
+          tone: "error",
+        });
+      }
+    } finally {
+      setBulkSendingClassId(null);
+    }
+  }
+
   if (!loadingClasses && classesTaught.length === 0) {
     return (
       <Card title="Marks Recording Status">
@@ -356,6 +408,37 @@ export default function MarksStatus() {
                             </div>
                           </div>
                         )}
+
+                        {/* Notify (or re-notify) every outstanding subject teacher for this
+                            class in one click, instead of opening the modal for each one
+                            individually. Flips to "Re-notify All" once every teacher in the
+                            group already has a reminder out, same as the per-teacher button. */}
+                        {teacherGroups.length > 1 &&
+                          (() => {
+                            const allAlreadySent = teacherGroups.every((group) =>
+                              sentKeys.has(`${c.id}:${group.teacherId}`)
+                            );
+                            const isSending = bulkSendingClassId === c.id;
+                            return (
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  variant={allAlreadySent ? "teal" : "secondary"}
+                                  onClick={() =>
+                                    notifyAllForClass(c.id, c.name, data.termName, teacherGroups)
+                                  }
+                                  disabled={isSending}
+                                >
+                                  {allAlreadySent ? <RefreshCcw size={13} /> : <Megaphone size={13} />}
+                                  {isSending
+                                    ? "Sending..."
+                                    : allAlreadySent
+                                    ? `Re-notify All (${teacherGroups.length})`
+                                    : `Notify All (${teacherGroups.length})`}
+                                </Button>
+                              </div>
+                            );
+                          })()}
 
                         {/* One row per subject teacher, covering every outstanding module of
                             theirs at once — a single reminder instead of one per module. */}

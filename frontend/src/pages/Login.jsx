@@ -110,7 +110,7 @@ export default function Login() {
             <h1 className="text-2xl font-bold text-slate-800 mb-2.5 tracking-tight">
               {title || "We'll be right back"}
             </h1>
-            <p className="text-sm text-slate-500 leading-relaxed whitespace-pre-line max-w-sm mx-auto">
+            <p className="text-sm text-slate-500 leading-relaxed whitespace-pre-line max-w-sm mx-auto px-4">
               {message ||
                 "The system is currently undergoing scheduled maintenance. Please check back shortly."}
             </p>
