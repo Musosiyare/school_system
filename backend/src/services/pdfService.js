@@ -355,6 +355,20 @@ function naNote(modules) {
 // side by side in one bordered row. Class Rank reads "X out of Y" — X is
 // this student's position, Y is how many students in the class were
 // actually rankable (i.e. have at least one recorded mark) this term. ----------
+// Conduct is shown as "remaining/40 (Good)" or "(Bad)" — Good at >= 20/40
+// (half), Bad below, which is exactly the atRisk threshold SBMS already
+// computes, so this just relabels that same boolean rather than adding a
+// second cutoff to keep in sync.
+function conductText(conduct) {
+  if (!conduct) return "N/A";
+  return `${conduct.remaining}/${conduct.maxMarks} (${conduct.atRisk ? "Bad" : "Good"})`;
+}
+
+function conductColor(conduct) {
+  if (!conduct) return BLACK;
+  return conduct.atRisk ? "#C0392B" : "#1E7E34";
+}
+
 function summaryStrip(report) {
   const rankText =
     report.classRank !== undefined && report.classRank !== null && report.classRankTotal
@@ -362,13 +376,14 @@ function summaryStrip(report) {
       : "N/A";
   return {
     table: {
-      widths: ["*", "*", "*"],
+      widths: ["*", "*", "*", "*"],
       dontBreakRows: true,
       body: [
         [
           { text: "WEIGHTED AVERAGE", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
           { text: "OVERALL RESULT", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
           { text: "CLASS RANK", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
+          { text: "CONDUCT", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
         ],
         [
           {
@@ -385,6 +400,14 @@ function summaryStrip(report) {
             fontSize: rankText.length > 8 ? 9 : 11,
             alignment: "center",
             fillColor: PANEL_GREY,
+          },
+          {
+            text: conductText(report.conduct),
+            bold: true,
+            fontSize: 8.5,
+            alignment: "center",
+            fillColor: PANEL_GREY,
+            color: conductColor(report.conduct),
           },
         ],
       ],

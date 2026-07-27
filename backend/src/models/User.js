@@ -21,8 +21,29 @@ User.init(
     // When the user last changed their own password (self-service), for audit.
     passwordChangedAt: { type: DataTypes.DATE, allowNull: true },
     role: {
-      type: DataTypes.ENUM("superuser", "manager", "teacher"),
+      type: DataTypes.ENUM("superuser", "manager", "teacher", "discipline"),
       allowNull: false,
+    },
+    // For the SBMS (Student Behavior Management System) companion app —
+    // a manager assigns this here, in the main system, rather than SBMS
+    // having its own way to grant access.
+    //
+    // role: "discipline" is for someone who ONLY does discipline work and
+    // never teaches. Being a real, distinct role value (not just a flag on
+    // top of "teacher") is what actually keeps them out of every
+    // authorize("teacher") route in this system — marks entry, module
+    // status, everywhere — not just the Teachers list. login() below also
+    // blocks this role from this system entirely; they only ever use SBMS.
+    //
+    // A teacher who ALSO does discipline work keeps role: "teacher" (so
+    // their teaching permissions are untouched) and gets disciplineRole
+    // set alongside it — see the "New discipline staff from teachers" flow
+    // on the Disciplinary Staff page. disciplineRole itself only matters
+    // to SBMS; it never affects what someone can do in this system.
+    disciplineRole: {
+      type: DataTypes.ENUM("dean_of_discipline", "disciplinary_officer"),
+      allowNull: true,
+      defaultValue: null,
     },
     status: {
       type: DataTypes.ENUM("active", "suspended"),

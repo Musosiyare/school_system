@@ -1,5 +1,3 @@
-import { forwardRef } from "react";
-
 export function Field({ label, children, className = "" }) {
   return (
     <label className={`flex flex-col gap-1.5 text-sm ${className}`}>
@@ -14,9 +12,9 @@ const fieldClasses =
   "placeholder:text-slate-400 outline-none transition " +
   "focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100";
 
-export const Input = forwardRef(function Input(props, ref) {
-  return <input ref={ref} {...props} className={`${fieldClasses} ${props.className || ""}`} />;
-});
+export function Input(props) {
+  return <input {...props} className={`${fieldClasses} ${props.className || ""}`} />;
+}
 
 export function Select({ children, ...props }) {
   return (

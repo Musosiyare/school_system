@@ -23,6 +23,7 @@ import AcademicYears from "./pages/manager/AcademicYears";
 import Classes from "./pages/manager/Classes";
 import Modules from "./pages/manager/Modules";
 import Teachers from "./pages/manager/Teachers";
+import DisciplinaryStaff from "./pages/manager/DisciplinaryStaff";
 import Students from "./pages/manager/Students";
 import Assignments from "./pages/manager/Assignments";
 import Statistics from "./pages/manager/Statistics";
@@ -113,6 +114,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["manager"]}>
                   <Teachers />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/manager/disciplinary-staff"
+              element={
+                <ProtectedRoute roles={["manager"]}>
+                  <DisciplinaryStaff />
                 </ProtectedRoute>
               }
             />

@@ -77,6 +77,16 @@ const login = asyncHandler(async (req, res) => {
     );
   }
 
+  // Discipline-only accounts (role: "discipline") exist purely for SBMS —
+  // this system has no pages for them, and letting login succeed would
+  // just land them in a broken redirect loop (every route requires
+  // superuser/manager/teacher). Fail clearly here instead.
+  if (user.role === "discipline") {
+    throw ApiError.unauthorized(
+      "This account is for the discipline system (SBMS), not this one. Please log in there instead."
+    );
+  }
+
   // A user's own account being active isn't enough — if their school has been
   // suspended by the superuser, nobody in that school (including the manager)
   // may log in, until the school is reactivated.

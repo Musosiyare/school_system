@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../../api/client";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -52,6 +53,30 @@ export default function Teachers() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
+
+  // Arriving from the header search (?highlight=<teacherId>): glow + scroll
+  // to the matching row once teachers have loaded. The param is cleared from
+  // the URL as soon as it's read into state — the effect below keys off the
+  // *param* changing, so if it stayed in the URL, clicking the same teacher
+  // again from the header search (a no-op URL change) wouldn't re-trigger.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightParam = searchParams.get("highlight");
+  const highlightRowRef = useRef(null);
+  const [highlightId, setHighlightId] = useState(null);
+
+  useEffect(() => {
+    if (!highlightParam) return;
+    setHighlightId(Number(highlightParam));
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("highlight");
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightParam]);
 
   async function load() {
     const [teachersRes, assignmentsRes] = await Promise.all([
@@ -233,6 +258,25 @@ export default function Teachers() {
   const { pageItems: pagedTeachers, page, setPage, totalPages, total, pageSize } =
     usePagination(sortedTeachers, 8);
 
+  useEffect(() => {
+    if (!highlightId || sortedTeachers.length === 0) return;
+    const idx = sortedTeachers.findIndex((t) => t.id === highlightId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / pageSize) + 1;
+    if (targetPage !== page) setPage(targetPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, sortedTeachers, pageSize]);
+
+  useEffect(() => {
+    if (highlightId && highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Fade the glow after a few seconds so it doesn't linger once the
+      // manager has clearly landed on the right row.
+      const t = setTimeout(() => setHighlightId(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [highlightId, page]);
+
   return (
     <div>
       <div className="flex justify-end mb-6">
@@ -280,12 +324,21 @@ export default function Teachers() {
             {pagedTeachers.map((t) => {
               const teacherAssignments = assignmentsFor(t.id);
               return (
-                <tr key={t.id}>
+                <tr
+                  key={t.id}
+                  ref={t.id === highlightId ? highlightRowRef : undefined}
+                  className={t.id === highlightId ? "bg-amber-50 ring-1 ring-inset ring-amber-300 transition-colors duration-1000" : undefined}
+                >
                   <Td className="align-top">
                     <p className="font-medium text-slate-800">{t.name}</p>
                     <p className="text-xs text-slate-400 truncate max-w-[180px]" title={t.email}>
                       {t.email}
                     </p>
+                    {t.disciplineRole && (
+                      <Badge tone="manager" className="mt-1">
+                        SBMS: {t.disciplineRole === "dean_of_discipline" ? "Dean of Discipline" : "Disciplinary Officer"}
+                      </Badge>
+                    )}
                   </Td>
                   <Td className="align-top whitespace-nowrap">
                     <div className="flex flex-col items-start gap-1">

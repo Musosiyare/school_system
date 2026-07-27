@@ -12,6 +12,7 @@ const {
   TeacherModuleAssignment,
   ClassModuleTermStatus,
 } = require("../models");
+const { getTermConductScore } = require("./conductService");
 
 // Resolves the class a student actually belonged to during a given
 // academic year — not just wherever they currently sit. Student.classId is
@@ -80,6 +81,11 @@ async function buildStudentReport(studentId, termId) {
   );
 
   const remark = await ReportRemark.findOne({ where: { studentId, termId } });
+
+  // Conduct mark for this term, sourced live from SBMS's shared table —
+  // same studentId/termId as everything else here since both systems use
+  // the same students/terms rows.
+  const conduct = await getTermConductScore(studentId, termId);
 
   const classTeacher = klass && klass.classTeacherId
     ? await User.findByPk(klass.classTeacherId, { attributes: ["id", "name"] })
@@ -155,6 +161,7 @@ async function buildStudentReport(studentId, termId) {
     weightedAverage,
     weightedPassLine,
     overallResult,
+    conduct,
     classTeacherRemark: remark ? remark.comment : null,
     classTeacherName: classTeacher ? classTeacher.name : null,
   };

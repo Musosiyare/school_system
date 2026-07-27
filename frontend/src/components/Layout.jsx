@@ -5,6 +5,7 @@ import { useMaintenance } from "../context/MaintenanceContext";
 import { useConfirm } from "./ui/ConfirmProvider";
 import NotificationBell from "./NotificationBell";
 import YearSwitcher from "./YearSwitcher";
+import GlobalSearch from "./GlobalSearch";
 import MaintenanceScreen from "./MaintenanceScreen";
 import MaintenanceBanner from "./MaintenanceBanner";
 import {
@@ -30,6 +31,7 @@ import {
   History,
   CalendarClock,
   SlidersHorizontal,
+  ShieldAlert,
 } from "lucide-react";
 
 const ROLE_META = {
@@ -53,6 +55,7 @@ const NAV = {
     { to: "/manager/classes", label: "Classes", icon: Layers },
     { to: "/manager/modules", label: "Modules", icon: BookOpen },
     { to: "/manager/teachers", label: "Teachers", icon: Users },
+    { to: "/manager/disciplinary-staff", label: "Disciplinary Staff", icon: ShieldAlert },
     { to: "/manager/students", label: "Students", icon: GraduationCap },
     { to: "/manager/assignments", label: "Assignments", icon: ClipboardList },
     { to: "/manager/reports", label: "Reports", icon: FileText },
@@ -95,6 +98,11 @@ const PAGE_META = {
   "/manager/classes": { title: "Classes", subtitle: "Classes for the year you're viewing.", icon: Layers },
   "/manager/modules": { title: "Modules", subtitle: "Your school's subject catalog.", icon: BookOpen },
   "/manager/teachers": { title: "Teachers", subtitle: "Teacher accounts in your school.", icon: Users },
+  "/manager/disciplinary-staff": {
+    title: "Disciplinary Staff",
+    subtitle: "Dean of Discipline and Disciplinary Officer (patron/matron) accounts for SBMS.",
+    icon: ShieldAlert,
+  },
   "/manager/students": { title: "Students", subtitle: "Pick a class to manage its students.", icon: GraduationCap },
   "/manager/assignments": {
     title: "Assignments",
@@ -347,6 +355,8 @@ export default function Layout({ children }) {
               <p className="hidden sm:block text-xs text-slate-500 truncate">{pageMeta.subtitle}</p>
             )}
           </div>
+
+          {user.role === "manager" && <GlobalSearch />}
 
           {user.role === "manager" && <YearSwitcher />}
 

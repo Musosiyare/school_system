@@ -21,6 +21,7 @@ const statisticsRoutes = require("./src/routes/statisticsRoutes");
 const settingsRoutes = require("./src/routes/settingsRoutes");
 const activityLogRoutes = require("./src/routes/activityLogRoutes");
 const promotionRoutes = require("./src/routes/promotionRoutes");
+const searchRoutes = require("./src/routes/searchRoutes");
 const { getSettingsRow } = require("./src/controllers/settingsController");
 const errorHandler = require("./src/middleware/errorHandler");
 
@@ -46,6 +47,7 @@ app.use("/api/statistics", statisticsRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
 app.use("/api/promotions", promotionRoutes);
+app.use("/api/search", searchRoutes);
 
 // 404 handler
 app.use((req, res) => {

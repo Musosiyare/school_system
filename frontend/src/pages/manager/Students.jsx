@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../../api/client";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -61,6 +62,20 @@ export default function Students() {
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
 
+  // Arriving from the header search (?classId=&highlight=): preselect the
+  // class once classes have loaded, then glow + scroll to the row once
+  // students have loaded. Each param is cleared from the URL immediately
+  // after being read into state — the effects below key off the *param*
+  // changing, so if we left it sitting in the URL, clicking the same class
+  // or student again from the header search (a no-op change to the URL)
+  // wouldn't re-trigger anything. Clearing it means the next click, even to
+  // an identical target, is always seen as a fresh value.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const classIdParam = searchParams.get("classId");
+  const highlightParam = searchParams.get("highlight");
+  const highlightRowRef = useRef(null);
+  const [highlightId, setHighlightId] = useState(null);
+
   // --- Pull Students (copy from another class/year into the class
   // currently being viewed) ---
   const [pulling, setPulling] = useState(false);
@@ -99,6 +114,36 @@ export default function Students() {
   useEffect(() => {
     loadStudents(selectedClassId);
   }, [selectedClassId]);
+
+  useEffect(() => {
+    if (!classIdParam || classes.length === 0) return;
+    if (classes.some((c) => String(c.id) === classIdParam)) {
+      setSelectedClassId(classIdParam);
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("classId");
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classes, classIdParam]);
+
+  useEffect(() => {
+    if (!highlightParam) return;
+    setHighlightId(Number(highlightParam));
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("highlight");
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightParam]);
 
   function updateField(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -285,6 +330,25 @@ export default function Students() {
   const { pageItems: pagedStudents, page, setPage, totalPages, total, pageSize } =
     usePagination(sortedStudents, 8);
 
+  useEffect(() => {
+    if (!highlightId || sortedStudents.length === 0) return;
+    const idx = sortedStudents.findIndex((s) => s.id === highlightId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / pageSize) + 1;
+    if (targetPage !== page) setPage(targetPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, sortedStudents, pageSize]);
+
+  useEffect(() => {
+    if (highlightId && highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Fade the glow after a few seconds so it doesn't linger once the
+      // manager has clearly landed on the right row.
+      const t = setTimeout(() => setHighlightId(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [highlightId, page]);
+
   function downloadStudentListPdf() {
     if (!selectedClassId) return;
     const token = localStorage.getItem("token");
@@ -392,7 +456,11 @@ export default function Students() {
                 <EmptyRow colSpan={6}>No students match "{query}".</EmptyRow>
               )}
               {pagedStudents.map((s) => (
-                <tr key={s.id}>
+                <tr
+                  key={s.id}
+                  ref={s.id === highlightId ? highlightRowRef : undefined}
+                  className={s.id === highlightId ? "bg-amber-50 ring-1 ring-inset ring-amber-300 transition-colors duration-1000" : undefined}
+                >
                   <Td className="font-mono text-slate-500">{s.admissionNumber || "-"}</Td>
                   <Td className="font-medium text-slate-800">
                     {s.firstName} {s.lastName}

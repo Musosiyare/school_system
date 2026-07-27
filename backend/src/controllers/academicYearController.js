@@ -10,6 +10,7 @@ const {
   ReportRemark,
   TeacherModuleAssignment,
   Notification,
+  User,
 } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
@@ -56,11 +57,28 @@ const createAcademicYear = asyncHandler(async (req, res) => {
   // reassign, or delete any of these once the new year is made active.
   // Rosters and marks are never copied — every class starts empty for the
   // new year, since who's actually enrolled is a fresh decision each year.
+  // Module-teacher assignments (who teaches what for which class) are, by
+  // contrast, treated as fresh each year — but managers still want last
+  // year's assignments carried forward as a starting point instead of
+  // rebuilding them by hand, so these are copied per class below just like
+  // ClassModule, remapped onto the new class ids.
   let carriedClasses = 0;
+  let carriedAssignments = 0;
   if (previousYear) {
     const prevClasses = await Class.findAll({
       where: { schoolId: req.schoolId, academicYearId: previousYear.id },
-      include: [ClassModule],
+      include: [
+        ClassModule,
+        {
+          model: TeacherModuleAssignment,
+          // Inner join: only pull assignments whose teacher is still
+          // active. A suspended teacher can't log in, so carrying their
+          // assignment forward would just leave a broken-looking
+          // assignment in the new year instead of an honest gap for the
+          // manager to fill.
+          include: [{ model: User, as: "teacher", where: { status: "active" }, required: true }],
+        },
+      ],
     });
 
     for (const prevClass of prevClasses) {
@@ -71,16 +89,38 @@ const createAcademicYear = asyncHandler(async (req, res) => {
         category: prevClass.category,
         classTeacherId: prevClass.classTeacherId,
       });
+      let carriedModuleIds = new Set();
       if (prevClass.ClassModules?.length) {
+        carriedModuleIds = new Set(prevClass.ClassModules.map((cm) => cm.moduleId));
         await ClassModule.bulkCreate(
           prevClass.ClassModules.map((cm) => ({ classId: newClass.id, moduleId: cm.moduleId }))
         );
+      }
+      if (prevClass.TeacherModuleAssignments?.length) {
+        // Defensive: removing a module from a class doesn't currently clean
+        // up any TeacherModuleAssignment still pointing at it, so guard
+        // against carrying forward a stale reference to a module that's no
+        // longer actually attached to this class.
+        const toCarry = prevClass.TeacherModuleAssignments.filter((tma) =>
+          carriedModuleIds.has(tma.moduleId)
+        );
+        if (toCarry.length) {
+          await TeacherModuleAssignment.bulkCreate(
+            toCarry.map((tma) => ({
+              teacherId: tma.teacherId,
+              moduleId: tma.moduleId,
+              classId: newClass.id,
+              academicYearId: year.id,
+            }))
+          );
+          carriedAssignments += toCarry.length;
+        }
       }
       carriedClasses += 1;
     }
   }
 
-  res.status(201).json({ academicYear: year, carriedClasses });
+  res.status(201).json({ academicYear: year, carriedClasses, carriedAssignments });
 });
 
 // GET /api/academic-years

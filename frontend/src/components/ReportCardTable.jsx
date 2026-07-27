@@ -101,6 +101,18 @@ function overallGrade(weightedAverage) {
 
 // Each Overall Result grade gets its own color so it stands out at a
 // glance — mirrors overallGradeColor() in backend/src/services/pdfService.js.
+// Mirrors conductText()/conductColor() in the backend's pdfService.js.
+// Good at >= 20/40 (half), Bad below — same threshold as SBMS's atRisk flag.
+function conductText(conduct) {
+  if (!conduct) return "N/A";
+  return `${conduct.remaining}/${conduct.maxMarks} (${conduct.atRisk ? "Bad" : "Good"})`;
+}
+
+function conductColor(conduct) {
+  if (!conduct) return "#000";
+  return conduct.atRisk ? "#C0392B" : "#1E7E34";
+}
+
 function overallGradeColor(weightedAverage) {
   const grade = overallGrade(weightedAverage);
   if (grade === "EXCELLENT") return "#1f7a4d"; // green
@@ -312,6 +324,7 @@ export default function ReportCardTable({
             <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>WEIGHTED AVERAGE</th>
             <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>OVERALL RESULT</th>
             <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>CLASS RANK</th>
+            <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>CONDUCT</th>
           </tr>
           <tr>
             <td style={{ ...center, fontWeight: 700, fontSize: 12, border: "none" }}>
@@ -332,6 +345,17 @@ export default function ReportCardTable({
               {report.classRank != null && report.classRankTotal
                 ? `${report.classRank} out of ${report.classRankTotal}`
                 : "N/A"}
+            </td>
+            <td
+              style={{
+                ...center,
+                fontWeight: 700,
+                fontSize: 9.5,
+                border: "none",
+                color: conductColor(report.conduct),
+              }}
+            >
+              {conductText(report.conduct)}
             </td>
           </tr>
         </tbody>

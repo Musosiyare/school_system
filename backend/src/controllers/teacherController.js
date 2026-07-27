@@ -1,4 +1,5 @@
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
 const { User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
@@ -6,10 +7,31 @@ const generateTempPassword = require("../utils/generatePassword");
 const { encryptTempPassword, decryptTempPassword } = require("../utils/tempCredentials");
 const { logActivity } = require("../utils/activityLogger");
 
+// Any endpoint that looks up "a teacher by id" needs to also match
+// discipline-only accounts (role: "discipline") — otherwise actions like
+// viewing credentials, deactivating, or changing their SBMS role would
+// silently 404 for exactly the accounts the Disciplinary Staff page is
+// meant to manage. Real teacher-only actions (creating/listing on the
+// Teachers page) still filter strictly on role: "teacher".
+const STAFF_ROLES = ["teacher", "discipline"];
+
 // POST /api/teachers (FR-3.1)
+// disciplineRole is optional — the Disciplinary Staff page passes it so
+// creating a Dean of Discipline / Disciplinary Officer account is one call
+// instead of create-then-patch. disciplineOnly marks an account that only
+// exists for SBMS and was never a real teacher — it gets role: "discipline"
+// instead of role: "teacher", which is what actually keeps it out of every
+// teacher-only route in this system (see User.js). The plain Teachers page
+// never sends either field, so ordinary teacher creation is unaffected.
 const createTeacher = asyncHandler(async (req, res) => {
-  const { name, email, phone } = req.body;
+  const { name, email, phone, disciplineRole, disciplineOnly } = req.body;
   if (!name || !email) throw ApiError.badRequest("name and email are required");
+  if (disciplineRole !== undefined && disciplineRole !== null && !["dean_of_discipline", "disciplinary_officer"].includes(disciplineRole)) {
+    throw ApiError.badRequest("disciplineRole must be 'dean_of_discipline', 'disciplinary_officer', or omitted", "disciplineRole");
+  }
+  if (disciplineOnly && !disciplineRole) {
+    throw ApiError.badRequest("An SBMS role is required when creating a discipline-only account", "disciplineRole");
+  }
 
   const existing = await User.findOne({ where: { email } });
   if (existing) throw ApiError.conflict("A user with this email already exists");
@@ -23,7 +45,8 @@ const createTeacher = asyncHandler(async (req, res) => {
     email,
     phone,
     passwordHash,
-    role: "teacher",
+    role: disciplineOnly ? "discipline" : "teacher",
+    disciplineRole: disciplineRole || null,
     mustChangePassword: true,
     // Kept in recoverable form until the teacher changes it themselves,
     // in case whoever created the account forgets to hand it over / loses it.
@@ -36,19 +59,27 @@ const createTeacher = asyncHandler(async (req, res) => {
     userId: req.user.id,
     schoolId: req.schoolId,
     action: "teacher.created",
-    description: `Added teacher ${teacher.name}`,
+    description: disciplineOnly
+      ? `Added ${teacher.name} as ${disciplineRole.replace(/_/g, " ")}`
+      : disciplineRole
+      ? `Added teacher ${teacher.name} as ${disciplineRole.replace(/_/g, " ")}`
+      : `Added teacher ${teacher.name}`,
     entityType: "teacher",
     entityId: teacher.id,
   });
 
   res.status(201).json({
-    teacher: { id: teacher.id, name: teacher.name, email: teacher.email },
+    teacher: { id: teacher.id, name: teacher.name, email: teacher.email, disciplineRole: teacher.disciplineRole },
     temporaryPassword: tempPassword,
   });
 });
 
 const listTeachers = asyncHandler(async (req, res) => {
   const teachers = await User.findAll({
+    // role: "teacher" strictly — a discipline-only account has role:
+    // "discipline" now, so it's naturally excluded here without needing a
+    // separate flag. A real teacher who also holds a discipline role keeps
+    // role: "teacher" and still shows up, disciplineRole and all.
     where: { schoolId: req.schoolId, role: "teacher" },
     attributes: [
       "id",
@@ -58,10 +89,38 @@ const listTeachers = asyncHandler(async (req, res) => {
       "status",
       "mustChangePassword",
       "tempPasswordSetAt",
+      "disciplineRole",
     ],
     order: [["name", "ASC"]],
   });
   res.json({ teachers });
+});
+
+// GET /api/teachers/disciplinary-staff — everyone relevant to SBMS: every
+// discipline-only account (role: "discipline"), PLUS any real teacher who
+// currently also holds a discipline role. A discipline-only account whose
+// role was just cleared still shows up here (matched by role alone) so
+// it's never orphaned — reachable to reassign, deactivate, or delete.
+const listDisciplinaryStaff = asyncHandler(async (req, res) => {
+  const staff = await User.findAll({
+    where: {
+      schoolId: req.schoolId,
+      [Op.or]: [{ role: "discipline" }, { role: "teacher", disciplineRole: { [Op.not]: null } }],
+    },
+    attributes: [
+      "id",
+      "name",
+      "email",
+      "phone",
+      "status",
+      "role",
+      "disciplineRole",
+      "mustChangePassword",
+      "tempPasswordSetAt",
+    ],
+    order: [["disciplineRole", "ASC"], ["name", "ASC"]],
+  });
+  res.json({ staff });
 });
 
 // GET /api/teachers/:id/temp-password — lets a manager recover a forgotten
@@ -69,7 +128,7 @@ const listTeachers = asyncHandler(async (req, res) => {
 // (at which point it's cleared and this returns 404).
 const getTeacherTempPassword = asyncHandler(async (req, res) => {
   const teacher = await User.findOne({
-    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+    where: { id: req.params.id, schoolId: req.schoolId, role: { [Op.in]: STAFF_ROLES } },
   });
   if (!teacher) throw ApiError.notFound("Teacher not found");
   if (!teacher.tempPasswordEncrypted) {
@@ -91,7 +150,7 @@ const getTeacherTempPassword = asyncHandler(async (req, res) => {
 // since it issues a new one rather than just decrypting the old one.
 const resetTeacherPassword = asyncHandler(async (req, res) => {
   const teacher = await User.findOne({
-    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+    where: { id: req.params.id, schoolId: req.schoolId, role: { [Op.in]: STAFF_ROLES } },
   });
   if (!teacher) throw ApiError.notFound("Teacher not found");
 
@@ -131,7 +190,7 @@ const updateTeacher = asyncHandler(async (req, res) => {
   if (!name || !email) throw ApiError.badRequest("name and email are required");
 
   const teacher = await User.findOne({
-    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+    where: { id: req.params.id, schoolId: req.schoolId, role: { [Op.in]: STAFF_ROLES } },
   });
   if (!teacher) throw ApiError.notFound("Teacher not found");
 
@@ -176,7 +235,7 @@ const deleteTeacher = asyncHandler(async (req, res) => {
   const { Mark, Class, TeacherModuleAssignment, sequelize } = require("../models");
 
   const teacher = await User.findOne({
-    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+    where: { id: req.params.id, schoolId: req.schoolId, role: { [Op.in]: STAFF_ROLES } },
   });
   if (!teacher) throw ApiError.notFound("Teacher not found");
 
@@ -226,7 +285,7 @@ const updateTeacherStatus = asyncHandler(async (req, res) => {
   }
 
   const teacher = await User.findOne({
-    where: { id: req.params.id, schoolId: req.schoolId, role: "teacher" },
+    where: { id: req.params.id, schoolId: req.schoolId, role: { [Op.in]: STAFF_ROLES } },
   });
   if (!teacher) throw ApiError.notFound("Teacher not found");
 
@@ -247,12 +306,47 @@ const updateTeacherStatus = asyncHandler(async (req, res) => {
   });
 });
 
+// PATCH /api/teachers/:id/discipline-role — a manager assigns or clears the
+// SBMS role for one of their teachers. `null` revokes it. This is the only
+// place this field is ever written from — SBMS itself only ever reads it.
+const updateDisciplineRole = asyncHandler(async (req, res) => {
+  const { disciplineRole } = req.body;
+  if (disciplineRole !== null && !["dean_of_discipline", "disciplinary_officer"].includes(disciplineRole)) {
+    throw ApiError.badRequest("disciplineRole must be 'dean_of_discipline', 'disciplinary_officer', or null", "disciplineRole");
+  }
+
+  const teacher = await User.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId, role: { [Op.in]: STAFF_ROLES } },
+  });
+  if (!teacher) throw ApiError.notFound("Teacher not found");
+
+  teacher.disciplineRole = disciplineRole;
+  await teacher.save();
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: "teacher.discipline_role_changed",
+    description: disciplineRole
+      ? `Set ${teacher.name}'s SBMS role to ${disciplineRole.replace(/_/g, " ")}`
+      : `Removed ${teacher.name}'s SBMS role`,
+    entityType: "teacher",
+    entityId: teacher.id,
+  });
+
+  res.json({
+    teacher: { id: teacher.id, name: teacher.name, email: teacher.email, disciplineRole: teacher.disciplineRole },
+  });
+});
+
 module.exports = {
   createTeacher,
   listTeachers,
+  listDisciplinaryStaff,
   getTeacherTempPassword,
   resetTeacherPassword,
   updateTeacher,
   updateTeacherStatus,
+  updateDisciplineRole,
   deleteTeacher,
 };

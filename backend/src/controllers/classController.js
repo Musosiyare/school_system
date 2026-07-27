@@ -11,7 +11,6 @@ const {
   Term,
   TeacherModuleAssignment,
   Notification,
-  ClassModuleTermStatus,
 } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
@@ -356,6 +355,14 @@ const setClassModules = asyncHandler(async (req, res) => {
   }
 
   await ClassModule.destroy({ where: { classId: klass.id, moduleId: toRemove } });
+  // A module being unassigned from the class means any teacher assignment
+  // for that module+class combo is no longer valid — remove it too, rather
+  // than leaving an orphaned TeacherModuleAssignment behind (which would
+  // otherwise still show up in the Assignments UI and even get carried
+  // forward into the next academic year).
+  if (toRemove.length > 0) {
+    await TeacherModuleAssignment.destroy({ where: { classId: klass.id, moduleId: toRemove } });
+  }
   await Promise.all(toAdd.map((moduleId) => ClassModule.create({ classId: klass.id, moduleId })));
 
   const updated = await ClassModule.findAll({ where: { classId: klass.id }, include: [Module] });
@@ -438,7 +445,7 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
   const totalStudents = await Student.count({ where: { classId: klass.id } });
   const moduleIds = klass.ClassModules.map((cm) => cm.moduleId);
 
-  const [assignments, marks, termStatuses] = await Promise.all([
+  const [assignments, marks] = await Promise.all([
     moduleIds.length
       ? TeacherModuleAssignment.findAll({
           where: { classId: klass.id, moduleId: moduleIds },
@@ -448,9 +455,6 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
     moduleIds.length
       ? Mark.findAll({ where: { classId: klass.id, moduleId: moduleIds, termId }, attributes: ["moduleId"] })
       : [],
-    moduleIds.length
-      ? ClassModuleTermStatus.findAll({ where: { classId: klass.id, moduleId: moduleIds, termId } })
-      : [],
   ]);
 
   const assignmentByModule = Object.fromEntries(assignments.map((a) => [a.moduleId, a]));
@@ -458,31 +462,24 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
   marks.forEach((m) => {
     recordedCountByModule[m.moduleId] = (recordedCountByModule[m.moduleId] || 0) + 1;
   });
-  // A module the teacher has explicitly disabled for this term isn't
-  // expected to have marks — leave it out of the "who hasn't recorded yet"
-  // list entirely instead of flagging them for something they opted out of.
-  const disabledModuleIds = new Set(
-    termStatuses.filter((s) => s.disabled).map((s) => s.moduleId)
-  );
 
-  const modules = klass.ClassModules.filter((cm) => !disabledModuleIds.has(cm.moduleId))
-    .map((cm) => {
-      const assignment = assignmentByModule[cm.moduleId];
-      const recordedCount = recordedCountByModule[cm.moduleId] || 0;
-      const missingCount = Math.max(totalStudents - recordedCount, 0);
-      return {
-        moduleId: cm.moduleId,
-        moduleTitle: cm.Module.moduleTitle,
-        moduleCode: cm.Module.moduleCode,
-        teacherId: assignment?.teacher?.id || null,
-        teacherName: assignment?.teacher?.name || null,
-        teacherEmail: assignment?.teacher?.email || null,
-        totalStudents,
-        recordedCount,
-        missingCount,
-        completed: totalStudents > 0 && missingCount === 0,
-      };
-    }).sort((a, b) => a.moduleTitle.localeCompare(b.moduleTitle));
+  const modules = klass.ClassModules.map((cm) => {
+    const assignment = assignmentByModule[cm.moduleId];
+    const recordedCount = recordedCountByModule[cm.moduleId] || 0;
+    const missingCount = Math.max(totalStudents - recordedCount, 0);
+    return {
+      moduleId: cm.moduleId,
+      moduleTitle: cm.Module.moduleTitle,
+      moduleCode: cm.Module.moduleCode,
+      teacherId: assignment?.teacher?.id || null,
+      teacherName: assignment?.teacher?.name || null,
+      teacherEmail: assignment?.teacher?.email || null,
+      totalStudents,
+      recordedCount,
+      missingCount,
+      completed: totalStudents > 0 && missingCount === 0,
+    };
+  }).sort((a, b) => a.moduleTitle.localeCompare(b.moduleTitle));
 
   res.json({ className: klass.name, termName: term.name, termLocked: term.isLocked, totalStudents, modules });
 });
