@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useMaintenance } from "../context/MaintenanceContext";
 import { useConfirm } from "./ui/ConfirmProvider";
@@ -151,6 +152,13 @@ const PAGE_META = {
   },
 };
 
+// Nav links that only make sense for a class teacher — Reports shows only
+// their own class(es) and Marks Status shows who in their class(es) hasn't
+// finished recording marks. A subject teacher who isn't a class teacher for
+// anything currently sees these as blank/empty pages, so they're hidden from
+// the nav entirely for that teacher.
+const CLASS_TEACHER_ONLY_LINKS = new Set(["/teacher/reports", "/teacher/marks-status"]);
+
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const { maintenanceMode, scheduledAt } = useMaintenance();
@@ -161,6 +169,30 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebarCollapsed") === "1"
   );
+  // Starts false (links hidden) so a subject teacher never briefly sees a
+  // link that leads to an empty page; flips true once we confirm they're a
+  // class teacher for at least one class this year.
+  const [isClassTeacher, setIsClassTeacher] = useState(false);
+
+  useEffect(() => {
+    if (!user || user.role !== "teacher") return;
+    let cancelled = false;
+    api
+      .get("/classes")
+      .then(({ data }) => {
+        if (cancelled) return;
+        const owns = (data.classes || []).some((c) => c.classTeacher?.id === user.id);
+        setIsClassTeacher(owns);
+      })
+      .catch(() => {
+        // If this fails, err on the side of showing the links rather than
+        // silently hiding pages the teacher may actually need.
+        if (!cancelled) setIsClassTeacher(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.role]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -183,7 +215,9 @@ export default function Layout({ children }) {
   }
 
   const meta = ROLE_META[user.role];
-  const navItems = NAV[user.role] || [];
+  const navItems = (NAV[user.role] || []).filter(
+    (item) => isClassTeacher || !CLASS_TEACHER_ONLY_LINKS.has(item.to)
+  );
   const pageMeta = PAGE_META[location.pathname] || {};
   const pageTitle =
     typeof pageMeta.title === "function" ? pageMeta.title(user) : pageMeta.title || meta.label;

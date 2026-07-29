@@ -12,7 +12,7 @@ const {
   TeacherModuleAssignment,
   ClassModuleTermStatus,
 } = require("../models");
-const { getTermConductScore } = require("./conductService");
+const { getTermConductScore, getTermDismissalDecision } = require("./conductService");
 
 // Resolves the class a student actually belonged to during a given
 // academic year — not just wherever they currently sit. Student.classId is
@@ -86,6 +86,11 @@ async function buildStudentReport(studentId, termId) {
   // same studentId/termId as everything else here since both systems use
   // the same students/terms rows.
   const conduct = await getTermConductScore(studentId, termId);
+
+  // The discipline office's termly decision, if any — same shared-table
+  // approach as conduct above. null means no decision has been recorded
+  // for this student/term yet (not the same as "retained").
+  const dismissal = await getTermDismissalDecision(studentId, termId);
 
   const classTeacher = klass && klass.classTeacherId
     ? await User.findByPk(klass.classTeacherId, { attributes: ["id", "name"] })
@@ -162,6 +167,7 @@ async function buildStudentReport(studentId, termId) {
     weightedPassLine,
     overallResult,
     conduct,
+    dismissal,
     classTeacherRemark: remark ? remark.comment : null,
     classTeacherName: classTeacher ? classTeacher.name : null,
   };

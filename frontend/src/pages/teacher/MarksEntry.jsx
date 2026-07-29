@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import api from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import Card from "../../components/ui/Card";
@@ -7,10 +8,9 @@ import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import { Field, Input } from "../../components/ui/FormField";
-import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2 } from "lucide-react";
+import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2, Check } from "lucide-react";
 
 // Custom dropdown for the Module/Class picker. A native <select> can't color
 // part of an option's text and leave the rest black — the whole <option> is
@@ -109,6 +109,31 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
   );
 }
 
+// Deterministic pastel color for a student's avatar circle, based on their
+// name — so each student gets a consistent, distinguishable color across
+// sessions without needing to store anything, while the rest of the row
+// (name text, status, etc.) stays neutral.
+const AVATAR_COLORS = [
+  { bg: "bg-rose-100", text: "text-rose-700" },
+  { bg: "bg-amber-100", text: "text-amber-700" },
+  { bg: "bg-emerald-100", text: "text-emerald-700" },
+  { bg: "bg-sky-100", text: "text-sky-700" },
+  { bg: "bg-violet-100", text: "text-violet-700" },
+  { bg: "bg-fuchsia-100", text: "text-fuchsia-700" },
+  { bg: "bg-teal-100", text: "text-teal-700" },
+  { bg: "bg-orange-100", text: "text-orange-700" },
+  { bg: "bg-indigo-100", text: "text-indigo-700" },
+  { bg: "bg-lime-100", text: "text-lime-700" },
+];
+
+function avatarColorFor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 export default function MarksEntry() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -133,11 +158,10 @@ export default function MarksEntry() {
   // entry immediately — there's nothing to protect yet.
   const [editMode, setEditMode] = useState(true);
   const [loadingMarks, setLoadingMarks] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState("all"); // "all" | "recorded" | "pending" | "pass" | "fail"
   const tableRef = useRef(null);
+  const scoreInputRefs = useRef({});
   const templateFileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [importWarnings, setImportWarnings] = useState([]);
@@ -154,15 +178,6 @@ export default function MarksEntry() {
   // tell at a glance which modules still need marks without having to open
   // each one first.
   const [assignmentStatuses, setAssignmentStatuses] = useState({});
-
-  // Success messages ("Saved...", "Imported...") are transient confirmations,
-  // not something that needs to stay on screen — clear it automatically a
-  // couple seconds after it appears.
-  useEffect(() => {
-    if (!success) return;
-    const timer = setTimeout(() => setSuccess(""), 2000);
-    return () => clearTimeout(timer);
-  }, [success]);
 
   useEffect(() => {
     (async () => {
@@ -240,8 +255,6 @@ export default function MarksEntry() {
   // been entered — not a blank sheet every time.
   useEffect(() => {
     (async () => {
-      setError("");
-      setSuccess("");
       setFieldErrors({});
       setStudentFilter("all");
       if (!currentAssignment) {
@@ -272,7 +285,7 @@ export default function MarksEntry() {
         // open for first-time entry.
         setEditMode(Object.keys(byStudent).length === 0);
       } catch (err) {
-        setError(err.message);
+        toast.error(err.message);
       } finally {
         setLoadingMarks(false);
       }
@@ -383,32 +396,44 @@ export default function MarksEntry() {
     setFieldErrors((e) => ({ ...e, [studentId]: message }));
   }
 
+  // Enter jumps to the next row's score field (like a spreadsheet) instead
+  // of submitting the whole form — much faster for recording a full class
+  // than reaching for the mouse or Tab-ing through the extra table cells.
+  function handleScoreKeyDown(e, studentId) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const idx = filteredStudents.findIndex((s) => s.id === studentId);
+    if (idx === -1) return;
+    const next = filteredStudents[idx + 1];
+    const nextInput = next && scoreInputRefs.current[next.id];
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+    }
+  }
+
   function startEdit() {
     setEditMode(true);
-    setSuccess("");
   }
 
   function cancelEdit() {
     setScores(savedScores);
     setFieldErrors({});
     setEditMode(false);
-    setError("");
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
     if (!currentAssignment || !selectedTermId) {
-      setError("Select an assignment and a term first");
+      toast.error("Select an assignment and a term first");
       return;
     }
     if (isTermLocked) {
-      setError("This term is locked — the school manager has closed it for editing.");
+      toast.error("This term is locked — the school manager has closed it for editing.");
       return;
     }
     if (moduleDisabled) {
-      setError("This module is disabled for this term. Re-enable it above before recording marks.");
+      toast.error("This module is disabled for this term. Re-enable it above before recording marks.");
       return;
     }
 
@@ -417,13 +442,20 @@ export default function MarksEntry() {
       .map((s) => ({ studentId: s.id, score: Number(scores[s.id]) }));
 
     if (entries.length === 0) {
-      setError("Enter at least one score");
+      toast.error("Enter at least one score");
       return;
     }
 
+    const changedEntries = entries.filter((e) => savedScores[e.studentId] !== String(e.score));
+
+    const confirmMessage =
+      changedEntries.length === entries.length
+        ? `You're about to save ${entries.length} score(s) for ${currentAssignment.Module?.moduleTitle} — ${currentAssignment.Class?.name}, ${currentTerm?.name}. This can still be edited later unless the term is locked.`
+        : `You're about to update ${changedEntries.length} score(s) for ${currentAssignment.Module?.moduleTitle} — ${currentAssignment.Class?.name}, ${currentTerm?.name} (the other ${entries.length - changedEntries.length} are already saved and unchanged). This can still be edited later unless the term is locked.`;
+
     const ok = await confirm({
       title: "Save these marks?",
-      message: `You're about to save ${entries.length} score(s) for ${currentAssignment.Module?.moduleTitle} — ${currentAssignment.Class?.name}, ${currentTerm?.name}. This can still be edited later unless the term is locked.`,
+      message: confirmMessage,
       confirmText: "Save Marks",
     });
     if (!ok) return;
@@ -438,7 +470,11 @@ export default function MarksEntry() {
       });
       const byStudent = Object.fromEntries(entries.map((e) => [e.studentId, String(e.score)]));
       setSavedScores((prev) => ({ ...prev, ...byStudent }));
-      setSuccess(`Saved ${entries.length} score(s) successfully.`);
+      if (changedEntries.length > 0) {
+        toast.success(`Saved ${changedEntries.length} score(s) successfully.`);
+      } else {
+        toast.info("No marks changed.");
+      }
       setFieldErrors({});
       // Lock the fields again now that these marks are recorded — matches
       // the same protection a fresh page load would give.
@@ -448,7 +484,7 @@ export default function MarksEntry() {
       // showing the stale pre-save count until the term selection changes.
       refreshAssignmentStatuses(selectedTermId);
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -498,8 +534,6 @@ export default function MarksEntry() {
   }
 
   function triggerTemplateUpload() {
-    setError("");
-    setSuccess("");
     setImportWarnings([]);
     setShowUploadModal(true);
   }
@@ -509,17 +543,17 @@ export default function MarksEntry() {
   async function importTemplateFile(file) {
     if (!file) return;
     if (isTermLocked) {
-      setError("This term is locked — the school manager has closed it for editing.");
+      toast.error("This term is locked — the school manager has closed it for editing.");
       setShowUploadModal(false);
       return;
     }
     if (moduleDisabled) {
-      setError("This module is disabled for this term. Re-enable it above before importing marks.");
+      toast.error("This module is disabled for this term. Re-enable it above before importing marks.");
       setShowUploadModal(false);
       return;
     }
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      setError("Please upload a .xlsx file — that's the format the downloaded template uses.");
+      toast.error("Please upload a .xlsx file — that's the format the downloaded template uses.");
       return;
     }
 
@@ -531,8 +565,6 @@ export default function MarksEntry() {
     if (!ok) return;
 
     setShowUploadModal(false);
-    setError("");
-    setSuccess("");
     setImportWarnings([]);
     setImporting(true);
     try {
@@ -547,16 +579,26 @@ export default function MarksEntry() {
       });
 
       const byStudent = Object.fromEntries(data.marks.map((m) => [m.studentId, String(m.score)]));
+      const changedCount = data.marks.filter(
+        (m) => savedScores[m.studentId] !== String(m.score)
+      ).length;
       setSavedScores((prev) => ({ ...prev, ...byStudent }));
       setScores((prev) => ({ ...prev, ...byStudent }));
       setEditMode(false);
-      setSuccess(`Imported ${data.imported} score(s) from the file.`);
-      if (data.warnings?.length) setImportWarnings(data.warnings);
+      if (changedCount > 0) {
+        toast.success(`Imported ${changedCount} score(s) from the file.`);
+      } else {
+        toast.info("No marks changed.");
+      }
+      if (data.warnings?.length) {
+        setImportWarnings(data.warnings);
+        toast.warning(`${data.warnings.length} row(s) in the file were skipped — see details below the table.`);
+      }
       // Same reason as in handleSubmit: keep the picker's status badge from
       // going stale after marks change.
       refreshAssignmentStatuses(selectedTermId);
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setImporting(false);
     }
@@ -691,7 +733,26 @@ export default function MarksEntry() {
         </Card>
       )}
 
-      {currentAssignment && selectedTermId && !moduleDisabled && (
+      {currentAssignment && selectedTermId && !moduleDisabled && isTermLocked && (
+        <Card>
+          <div className="flex flex-col items-center text-center gap-3 py-12 px-6">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <Lock size={26} />
+            </div>
+            <h3 className="text-base font-semibold text-slate-800">
+              {currentTerm?.name} is locked
+            </h3>
+            <p className="text-sm text-slate-500 max-w-md">
+              The school manager has closed this term for editing, so marks for{" "}
+              {currentAssignment.Module?.moduleTitle} — {currentAssignment.Class?.name} can't be
+              viewed, entered, or changed here right now. Ask the school manager to reopen the
+              term if you need to make changes.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {currentAssignment && selectedTermId && !moduleDisabled && !isTermLocked && (
         <Card
           title={`Marks — ${currentAssignment.Module?.moduleTitle} (${currentAssignment.Class?.name})`}
           subtitle={`Module weight / max score: ${maxScore}`}
@@ -704,32 +765,22 @@ export default function MarksEntry() {
                 className="w-full lg:w-auto"
               >
                 <FileSpreadsheet size={14} />
-                <span className="hidden lg:inline">Download </span>Template
+                Download Marks Template
               </Button>
-              {!isTermLocked && (
-                <>
-                  {/* Same protection as the marks table itself: once marks are
-                      already saved, uploading a template is disabled until
-                      the teacher explicitly clicks "Edit Marks" — otherwise a
-                      file could silently overwrite recorded scores. */}
-                  <Button
-                    size="sm"
-                    variant="violet"
-                    onClick={triggerTemplateUpload}
-                    disabled={fieldsDisabled || importing}
-                    title={
-                      hasSavedMarks && !editMode
-                        ? 'Marks are already recorded. Click "Edit Marks" to upload a new file.'
-                        : undefined
-                    }
-                    className="w-full lg:w-auto"
-                  >
-                    <Upload size={14} />
-                    <span className="hidden lg:inline">{importing ? "Importing..." : "Upload Filled Template"}</span>
-                    <span className="lg:hidden">{importing ? "Importing..." : "Upload"}</span>
-                  </Button>
-                </>
-              )}
+              {/* Same protection as the marks table itself: once marks are
+                  already saved, uploading a template is disabled until
+                  the teacher explicitly clicks "Edit Marks" — otherwise a
+                  file could silently overwrite recorded scores. */}
+              <Button
+                size="sm"
+                variant="violet"
+                onClick={triggerTemplateUpload}
+                disabled={fieldsDisabled || importing}
+                className="w-full lg:w-auto"
+              >
+                <Upload size={14} />
+                {importing ? "Importing..." : "Upload Marks"}
+              </Button>
               <Button
                 size="sm"
                 variant="teal"
@@ -737,10 +788,9 @@ export default function MarksEntry() {
                 className="w-full lg:w-auto"
               >
                 <Download size={14} />
-                <span className="hidden lg:inline">Download </span>Evidence PDF
+                Get Marksheet
               </Button>
-              {!isTermLocked &&
-                hasSavedMarks &&
+              {hasSavedMarks &&
                 (editMode ? (
                   <Button size="sm" variant="ghost" onClick={cancelEdit} className="w-full lg:w-auto">
                     <X size={14} /> Cancel
@@ -753,15 +803,6 @@ export default function MarksEntry() {
             </div>
           }
         >
-          {isTermLocked && (
-            <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
-              <Lock size={16} className="text-red-600 shrink-0 mt-0.5" />
-              <span>
-                This term is locked. You can still see the class list below, but scores can't be
-                entered or changed until the school manager reopens it.
-              </span>
-            </div>
-          )}
           {importWarnings.length > 0 && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
               <p className="font-medium mb-1">Some rows in the uploaded file were skipped:</p>
@@ -772,7 +813,7 @@ export default function MarksEntry() {
               </ul>
             </div>
           )}
-          {!isTermLocked && hasSavedMarks && !editMode && (
+          {hasSavedMarks && !editMode && (
             <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600 flex items-center justify-between flex-wrap gap-2">
               <span>Marks for this module have already been recorded. Click "Edit Marks" to make changes.</span>
               <Badge tone="neutral">Read-only</Badge>
@@ -873,25 +914,48 @@ export default function MarksEntry() {
                       const numericValue = hasValue ? Number(raw) : null;
                       const passed =
                         hasValue && passingLine !== undefined ? numericValue >= passingLine : null;
+                      const avatarColor = avatarColorFor(`${s.firstName} ${s.lastName}`);
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/80">
                           <Td className="font-medium text-slate-800">
                             <div className="flex items-center gap-2.5">
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-xs font-semibold">
+                              <div
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarColor.bg} ${avatarColor.text}`}
+                              >
                                 {s.firstName?.[0]?.toUpperCase()}
                                 {s.lastName?.[0]?.toUpperCase()}
                               </div>
-                              {s.firstName} {s.lastName}
+                              <span>{s.firstName} {s.lastName}</span>
+                              {hasValue ? (
+                                <span
+                                  className="shrink-0 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500"
+                                  aria-label="Mark recorded"
+                                >
+                                  <Check size={11} strokeWidth={3} className="text-white" />
+                                </span>
+                              ) : (
+                                <span
+                                  className="shrink-0 flex h-4 w-4 items-center justify-center"
+                                  aria-label="Mark not recorded"
+                                  title="Not recorded yet"
+                                >
+                                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                </span>
+                              )}
                             </div>
                           </Td>
                           <Td>
                             <div className="flex flex-col gap-1">
                               <Input
+                                ref={(el) => {
+                                  scoreInputRefs.current[s.id] = el;
+                                }}
                                 type="number"
                                 min="0"
                                 max={maxScore}
                                 value={scores[s.id] ?? ""}
                                 onChange={(e) => updateScore(s.id, e.target.value)}
+                                onKeyDown={(e) => handleScoreKeyDown(e, s.id)}
                                 disabled={fieldsDisabled}
                                 className="w-24"
                               />
@@ -919,8 +983,6 @@ export default function MarksEntry() {
               <Button type="submit" disabled={students.length === 0 || fieldsDisabled}>
                 {saving ? "Saving..." : "Save Marks"}
               </Button>
-              <ErrorText>{error}</ErrorText>
-              <SuccessText>{success}</SuccessText>
             </div>
           </form>
         </Card>

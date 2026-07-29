@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   Phone,
   UserCircle,
+  FileSpreadsheet,
 } from "lucide-react";
 
 export default function TeacherDashboard() {
@@ -125,19 +126,54 @@ export default function TeacherDashboard() {
     setShowStudentsModal(true);
   }
 
+  function downloadStudentsExcel(classId, className) {
+    const token = localStorage.getItem("token");
+    fetch(`${api.defaults.baseURL}/classes/${classId}/students/excel`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `students-${(className || "class").replace(/\s+/g, "-")}.xlsx`;
+        link.click();
+      });
+  }
+
   // "Students" isn't its own grouping mode — it's a per-class breakdown of
   // the counts already fetched, shown in a small popup.
+  function genderCounts(students) {
+    let boys = 0;
+    let girls = 0;
+    for (const s of students) {
+      if (s.sex === "M") boys += 1;
+      else if (s.sex === "F") girls += 1;
+    }
+    return { boys, girls };
+  }
+
   const studentsByClass = uniqueClassIds
     .map((classId) => {
       const a = assignments.find((x) => x.classId === classId);
-      return { classId, className: a?.Class?.name || "—", count: studentCounts[classId] ?? null };
+      const students = studentsByClassId[classId] || [];
+      const { boys, girls } = genderCounts(students);
+      return {
+        classId,
+        className: a?.Class?.name || "—",
+        count: studentCounts[classId] ?? null,
+        boys,
+        girls,
+      };
     })
     .sort((a, b) => a.className.localeCompare(b.className));
+
+  const overallGender = genderCounts(uniqueClassIds.flatMap((id) => studentsByClassId[id] || []));
 
   const selectedClassInfo = studentsByClass.find((row) => row.classId === selectedClassId);
   const selectedClassStudents = (studentsByClassId[selectedClassId] || [])
     .slice()
     .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+  const selectedClassGender = genderCounts(selectedClassStudents);
 
   const groupedAssignments = buildGroups(groupBy);
 
@@ -159,7 +195,7 @@ export default function TeacherDashboard() {
       clickable: assignments.length > 0,
     },
     {
-      label: "Students (est.)",
+      label: "Students",
       value: totalStudents,
       icon: Users,
       accent: "from-blue-400 to-blue-600",
@@ -167,8 +203,8 @@ export default function TeacherDashboard() {
       clickable: assignments.length > 0,
     },
     {
-      label: "Class Teacher Of",
-      value: classesTaught.length,
+      label: "Class Teacher",
+      value: classesTaught.length > 0 ? classesTaught.map((c) => c.name).join(", ") : "—",
       icon: Star,
       accent: "from-violet-400 to-violet-600",
       onClick: focusClassTeacher,
@@ -218,7 +254,7 @@ export default function TeacherDashboard() {
                 />
               )}
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-slate-800">{loading ? "…" : s.value}</div>
+            <div className="text-xl sm:text-2xl font-bold text-slate-800 truncate" title={typeof s.value === "string" ? s.value : undefined}>{loading ? "…" : s.value}</div>
             <div className="text-xs sm:text-sm text-slate-500">{s.label}</div>
           </button>
         ))}
@@ -412,7 +448,31 @@ export default function TeacherDashboard() {
         }
       >
         {selectedClassId ? (
-          <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3.5 py-2.5">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="font-semibold text-slate-700">
+                  {selectedClassStudents.length} Total Student{selectedClassStudents.length === 1 ? "" : "s"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-slate-600">
+                  <span className="h-2 w-2 rounded-full bg-blue-400" />
+                  {selectedClassGender.boys} Boys
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-slate-600">
+                  <span className="h-2 w-2 rounded-full bg-rose-400" />
+                  {selectedClassGender.girls} Girls
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => downloadStudentsExcel(selectedClassId, selectedClassInfo?.className)}
+                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-teacher bg-white border border-teacher/30 hover:bg-teacher/10 px-2.5 py-1.5 rounded-md transition"
+              >
+                <FileSpreadsheet size={13} />
+                Download Excel
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
             {selectedClassStudents.length === 0 ? (
               <p className="text-sm text-slate-400 py-4 text-center">
                 No students found in this class yet.
@@ -444,40 +504,62 @@ export default function TeacherDashboard() {
                 </div>
               ))
             )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2 rounded-lg bg-brand-50 border border-brand-100 px-3 py-2 text-sm text-brand-700">
-              <Users size={15} />
-              <span>
-                <span className="font-semibold">{totalStudents}</span> student
-                {totalStudents !== 1 ? "s" : ""} across{" "}
-                <span className="font-semibold">{uniqueClassIds.length}</span> class
-                {uniqueClassIds.length !== 1 ? "es" : ""}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-sm">
+              <span className="font-semibold text-slate-700">
+                {totalStudents} Total Student{totalStudents === 1 ? "" : "s"}
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-blue-400" />
+                {overallGender.boys} Boys
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-rose-400" />
+                {overallGender.girls} Girls
+              </span>
+              <span className="text-slate-400">
+                across {uniqueClassIds.length} class{uniqueClassIds.length !== 1 ? "es" : ""}
               </span>
             </div>
-            <p className="text-xs text-slate-400 -mt-2">Pick a class to see its students.</p>
             <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
               {studentsByClass.map((row) => (
-                <button
+                <div
                   key={row.classId}
-                  type="button"
-                  onClick={() => setSelectedClassId(row.classId)}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3.5 py-2.5 text-left hover:border-brand-300 hover:bg-brand-50/50 transition"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3.5 py-2.5 hover:border-brand-300 hover:bg-slate-50 transition"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-teal-600 text-white shadow-sm">
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                       <Layers size={15} />
                     </span>
-                    <span className="text-sm font-medium text-slate-800">{row.className}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-800 truncate">
+                        {row.className}
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5 text-xs text-slate-500">
+                        <span>{row.count ?? "…"} Total</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                          {row.boys} Boys
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                          {row.girls} Girls
+                        </span>
+                      </span>
+                    </span>
                   </span>
-                  <span className="flex items-center gap-2 shrink-0">
-                    <Badge tone="teacher">
-                      {row.count ?? "…"} student{row.count === 1 ? "" : "s"}
-                    </Badge>
-                    <ArrowRight size={14} className="text-slate-300" />
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClassId(row.classId)}
+                    className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold px-3 py-1.5 shadow-sm transition"
+                  >
+                    <FileText size={13} />
+                    Class Report
+                  </button>
+                </div>
               ))}
             </div>
           </div>

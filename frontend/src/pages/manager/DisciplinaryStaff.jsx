@@ -334,7 +334,7 @@ export default function DisciplinaryStaff() {
                 ?.filter((t) => !t.disciplineRole)
                 .map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({t.email})
+                    {t.name}
                   </option>
                 ))}
             </Select>

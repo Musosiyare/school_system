@@ -99,27 +99,25 @@ function overallGrade(weightedAverage) {
   return "FAIL";
 }
 
-// Each Overall Result grade gets its own color so it stands out at a
-// glance — mirrors overallGradeColor() in backend/src/services/pdfService.js.
-// Mirrors conductText()/conductColor() in the backend's pdfService.js.
+// Mirrors conductText() in the backend's pdfService.js.
 // Good at >= 20/40 (half), Bad below — same threshold as SBMS's atRisk flag.
+// Overall Result and Conduct are both shown in plain black text — no
+// color-coding — mirrors the backend's pdfService.js.
 function conductText(conduct) {
   if (!conduct) return "N/A";
-  return `${conduct.remaining}/${conduct.maxMarks} (${conduct.atRisk ? "Bad" : "Good"})`;
+  return `${conduct.remaining}/${conduct.maxMarks}`;
 }
 
-function conductColor(conduct) {
-  if (!conduct) return "#000";
-  return conduct.atRisk ? "#C0392B" : "#1E7E34";
-}
-
-function overallGradeColor(weightedAverage) {
-  const grade = overallGrade(weightedAverage);
-  if (grade === "EXCELLENT") return "#1f7a4d"; // green
-  if (grade === "VERY GOOD") return "#1d4ed8"; // blue
-  if (grade === "PASS") return "#b45309"; // amber
-  if (grade === "FAIL") return "#b3403a"; // red
-  return "#6b7280"; // N/A — gray
+// Mirrors deliberationState() in the backend's pdfService.js — dismissal
+// (from SBMS's shared decision) always wins over the plain conduct
+// reading; "retained" or no decision at all falls back to Good/Bad from
+// the raw conduct number.
+function deliberationState(report) {
+  const decision = report.dismissal?.decision;
+  if (decision === "dismissed_permanently") return "dismissed_permanently";
+  if (decision === "dismissed_term") return "dismissed_term";
+  if (!report.conduct) return null;
+  return report.conduct.atRisk ? "bad" : "good";
 }
 
 // Watermark shows the class name (previously the school name). Mirrors
@@ -146,6 +144,59 @@ function SectionLabel({ children, color, fontSize }) {
       }}
     >
       {children}
+    </div>
+  );
+}
+
+// Small bordered square, a checkmark centered when ticked. Note: the
+// downloaded PDF (tickboxCell() in the backend's pdfService.js) still uses
+// "X" for the tick, since that PDF only ships Helvetica's standard 14
+// fonts, which don't include a checkmark glyph.
+function Tickbox({ ticked }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 11,
+        height: 11,
+        border: "1px solid #000",
+        fontSize: 8,
+        lineHeight: 1,
+        flexShrink: 0,
+      }}
+    >
+      {ticked ? <span style={{ fontWeight: 900, fontSize: 10 }}>✓</span> : ""}
+    </span>
+  );
+}
+
+function DeliberationRow({ ticked, label, color }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
+      <Tickbox ticked={ticked} />
+      <span style={{ fontSize: 8, color: color || "#000" }}>{label}</span>
+    </div>
+  );
+}
+
+// Mirrors deliberationBox() in the backend's pdfService.js — exactly one
+// of the four boxes ticked, based on deliberationState().
+function DeliberationGrid({ state }) {
+  return (
+    <div className="report-avoid-break" style={{ marginBottom: 6 }}>
+      <SectionLabel fontSize={9}>DELIBERATION</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "0 8px" }}>
+        <div style={{ display: "flex", gap: 16 }}>
+          <DeliberationRow ticked={state === "good"} label="Good behavior" />
+          <DeliberationRow ticked={state === "bad"} label="Bad behavior" />
+        </div>
+        <div style={{ display: "flex", gap: 16 }}>
+          <DeliberationRow ticked={state === "dismissed_term"} label="Dismissed this term" />
+          <DeliberationRow ticked={state === "dismissed_permanently"} label="Dismissed permanently" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -216,7 +267,7 @@ export default function ReportCardTable({
               Student Name: {report.student?.name || "-"}
             </div>
             <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
-              Class: {classLabel(className || report.student?.class, classCategory ?? report.student?.classCategory)}
+              Class: {className || report.student?.class || "-"}
             </div>
             <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
               Student ID: {report.student?.admissionNumber || "-"}
@@ -323,7 +374,7 @@ export default function ReportCardTable({
           <tr>
             <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>WEIGHTED AVERAGE</th>
             <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>OVERALL RESULT</th>
-            <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>CLASS RANK</th>
+            <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>POSITION</th>
             <th style={{ ...center, fontSize: 9, color: "#000", border: "none" }}>CONDUCT</th>
           </tr>
           <tr>
@@ -336,7 +387,7 @@ export default function ReportCardTable({
                 fontWeight: 700,
                 fontSize: 12,
                 border: "none",
-                color: overallGradeColor(report.weightedAverage),
+                color: "#000",
               }}
             >
               {overallGrade(report.weightedAverage)}
@@ -352,7 +403,7 @@ export default function ReportCardTable({
                 fontWeight: 700,
                 fontSize: 9.5,
                 border: "none",
-                color: conductColor(report.conduct),
+                color: "#000",
               }}
             >
               {conductText(report.conduct)}
@@ -360,6 +411,10 @@ export default function ReportCardTable({
           </tr>
         </tbody>
       </table>
+
+      {deliberationState(report) && (
+        <DeliberationGrid state={deliberationState(report)} />
+      )}
 
       <SectionLabel>SIGNATURES</SectionLabel>
 

@@ -14,7 +14,7 @@ import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
-import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays, Trash2, PauseCircle, PlayCircle, GraduationCap, Pencil, Check, X } from "lucide-react";
+import { Settings, Plus, Layers, Eye, BookOpen, UserCircle2, CalendarDays, Trash2, PauseCircle, PlayCircle, GraduationCap, Pencil, Check, X, Users2 } from "lucide-react";
 
 export default function Classes() {
   const confirm = useConfirm();
@@ -298,6 +298,20 @@ export default function Classes() {
                   <div className="flex items-center gap-2">
                     {c.name}
                     {c.isSuspended && <Badge tone="warning">Suspended</Badge>}
+                  </div>
+                  <div className="flex items-center gap-2.5 mt-1.5 text-xs font-medium">
+                    <span className="inline-flex items-center gap-1 text-slate-500">
+                      <Users2 size={12} className="text-slate-400" />
+                      {c.studentCounts?.total ?? 0} Students
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-sky-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                      {c.studentCounts?.boys ?? 0} Boys
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-rose-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                      {c.studentCounts?.girls ?? 0} Girls
+                    </span>
                   </div>
                 </Td>
                 <Td>

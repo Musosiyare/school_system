@@ -12,7 +12,12 @@ const {
   assignClassTeacher,
   getIncompleteMarks,
 } = require("../controllers/classController");
-const { listStudentsByClass, createStudent, getClassStudentListPdf } = require("../controllers/studentController");
+const {
+  listStudentsByClass,
+  createStudent,
+  getClassStudentListPdf,
+  getClassStudentListExcel,
+} = require("../controllers/studentController");
 const { getClassReport, getClassReportPdf } = require("../controllers/reportController");
 const { listModuleStatus, setModuleStatus } = require("../controllers/moduleStatusController");
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
@@ -34,6 +39,7 @@ router.get("/:id/incomplete-marks", authorize("manager", "teacher"), getIncomple
 
 router.get("/:id/students", authorize("manager", "teacher"), listStudentsByClass);
 router.get("/:id/students/pdf", authorize("manager"), getClassStudentListPdf);
+router.get("/:id/students/excel", authorize("manager", "teacher"), getClassStudentListExcel);
 
 router.get("/:classId/term/:termId/report", authorize("manager", "teacher"), getClassReport);
 router.get("/:classId/term/:termId/report/pdf", authorize("manager", "teacher"), getClassReportPdf);

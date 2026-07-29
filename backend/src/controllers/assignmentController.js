@@ -63,15 +63,24 @@ const listTeacherAssignments = asyncHandler(async (req, res) => {
   }
 
   // A teacher's own class/module picker (used to enter marks, download
-  // templates, etc.) should only ever show the current year's assignments —
+  // templates, etc.) defaults to the current year's assignments only —
   // last year's assignments would otherwise still show up here forever,
   // since assignment rows are never deleted just because the year ended.
-  // The manager-facing assignment list (listAllAssignments below) is
-  // untouched, so old assignments stay visible there for record-keeping.
+  // Passing ?academicYearId= explicitly overrides that default so a teacher
+  // can look back at a specific past year's assignments (e.g. from the
+  // "Past Years" page, to view marks they recorded for a module/class that
+  // year) without exposing every year at once. The manager-facing
+  // assignment list (listAllAssignments below) is untouched, so old
+  // assignments stay visible there for record-keeping regardless.
   const where = { teacherId };
   if (req.user.role === "teacher") {
-    const currentYear = await getCurrentAcademicYear(req.schoolId);
-    where.academicYearId = currentYear ? currentYear.id : 0;
+    const requestedYearId = req.query.academicYearId ? Number(req.query.academicYearId) : null;
+    if (requestedYearId) {
+      where.academicYearId = requestedYearId;
+    } else {
+      const currentYear = await getCurrentAcademicYear(req.schoolId);
+      where.academicYearId = currentYear ? currentYear.id : 0;
+    }
   }
 
   let assignments = await TeacherModuleAssignment.findAll({
@@ -86,9 +95,24 @@ const listTeacherAssignments = asyncHandler(async (req, res) => {
   res.json({ assignments });
 });
 
-// GET /api/assignments — all assignments in the manager's school (for the overview table)
+// GET /api/assignments — assignments in the manager's school (for the overview table).
+// Defaults to the CURRENT academic year only. Without this, a teacher who
+// carries the same module/class forward each year (e.g. Math in S4A) would
+// show up with one row per year they've ever taught it, since classes are
+// recreated fresh each year with the same name — that reads as duplicate
+// modules even though nothing is actually duplicated in the data. Pass
+// ?all=true to see the full history across every year instead.
 const listAllAssignments = asyncHandler(async (req, res) => {
+  const wantsAll = req.query.all === "true";
+
+  const where = {};
+  if (!wantsAll) {
+    const currentYear = await getCurrentAcademicYear(req.schoolId);
+    where.academicYearId = currentYear ? currentYear.id : 0;
+  }
+
   const assignments = await TeacherModuleAssignment.findAll({
+    where,
     include: [
       { model: User, as: "teacher", attributes: ["id", "name", "email"] },
       Module,

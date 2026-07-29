@@ -15,6 +15,15 @@ const { logActivity } = require("../utils/activityLogger");
 // Teachers page) still filter strictly on role: "teacher".
 const STAFF_ROLES = ["teacher", "discipline"];
 
+// A discipline-only account (role: "discipline") was never a real teacher —
+// it exists purely for SBMS — so activity log entries about it should read
+// "discipline staff", not "teacher". A real teacher who also happens to
+// hold an SBMS role (disciplineRole set, role still "teacher") keeps being
+// logged as a teacher; only the account TYPE decides the wording here, not
+// whether an SBMS role is attached.
+const staffNoun = (account) => (account.role === "discipline" ? "discipline staff" : "teacher");
+const staffActionPrefix = (account) => (account.role === "discipline" ? "discipline" : "teacher");
+
 // POST /api/teachers (FR-3.1)
 // disciplineRole is optional — the Disciplinary Staff page passes it so
 // creating a Dean of Discipline / Disciplinary Officer account is one call
@@ -58,13 +67,13 @@ const createTeacher = asyncHandler(async (req, res) => {
   await logActivity({
     userId: req.user.id,
     schoolId: req.schoolId,
-    action: "teacher.created",
+    action: disciplineOnly ? "discipline.created" : "teacher.created",
     description: disciplineOnly
-      ? `Added ${teacher.name} as ${disciplineRole.replace(/_/g, " ")}`
+      ? `Added ${teacher.name} as discipline staff (${disciplineRole.replace(/_/g, " ")})`
       : disciplineRole
       ? `Added teacher ${teacher.name} as ${disciplineRole.replace(/_/g, " ")}`
       : `Added teacher ${teacher.name}`,
-    entityType: "teacher",
+    entityType: disciplineOnly ? "discipline" : "teacher",
     entityId: teacher.id,
   });
 
@@ -170,9 +179,9 @@ const resetTeacherPassword = asyncHandler(async (req, res) => {
   await logActivity({
     userId: req.user.id,
     schoolId: req.schoolId,
-    action: "teacher.password_reset",
-    description: `Reset password for teacher ${teacher.name}`,
-    entityType: "teacher",
+    action: `${staffActionPrefix(teacher)}.password_reset`,
+    description: `Reset password for ${staffNoun(teacher)} ${teacher.name}`,
+    entityType: staffActionPrefix(teacher),
     entityId: teacher.id,
   });
 
@@ -207,9 +216,9 @@ const updateTeacher = asyncHandler(async (req, res) => {
   await logActivity({
     userId: req.user.id,
     schoolId: req.schoolId,
-    action: "teacher.updated",
-    description: `Updated details for teacher ${teacher.name}`,
-    entityType: "teacher",
+    action: `${staffActionPrefix(teacher)}.updated`,
+    description: `Updated details for ${staffNoun(teacher)} ${teacher.name}`,
+    entityType: staffActionPrefix(teacher),
     entityId: teacher.id,
   });
 
@@ -264,9 +273,9 @@ const deleteTeacher = asyncHandler(async (req, res) => {
   await logActivity({
     userId: req.user.id,
     schoolId: req.schoolId,
-    action: "teacher.deleted",
-    description: `Deleted teacher ${teacher.name}`,
-    entityType: "teacher",
+    action: `${staffActionPrefix(teacher)}.deleted`,
+    description: `Deleted ${staffNoun(teacher)} ${teacher.name}`,
+    entityType: staffActionPrefix(teacher),
     entityId: teacher.id,
   });
 
@@ -295,9 +304,9 @@ const updateTeacherStatus = asyncHandler(async (req, res) => {
   await logActivity({
     userId: req.user.id,
     schoolId: req.schoolId,
-    action: status === "active" ? "teacher.activated" : "teacher.deactivated",
-    description: `${status === "active" ? "Activated" : "Deactivated"} teacher ${teacher.name}`,
-    entityType: "teacher",
+    action: `${staffActionPrefix(teacher)}.${status === "active" ? "activated" : "deactivated"}`,
+    description: `${status === "active" ? "Activated" : "Deactivated"} ${staffNoun(teacher)} ${teacher.name}`,
+    entityType: staffActionPrefix(teacher),
     entityId: teacher.id,
   });
 

@@ -1,3 +1,4 @@
+const ExcelJS = require("exceljs");
 const { Student, StudentEnrollment, Class, Mark, ReportRemark, School, User, AcademicYear } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
@@ -5,6 +6,7 @@ const generateStudentId = require("../utils/generateStudentId");
 const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
 const { generateStudentListPdf, generateStudentRosterPdf } = require("../services/pdfService");
 const { logActivity } = require("../utils/activityLogger");
+const { getPermanentlyDismissedStudentIds } = require("../services/conductService");
 
 // POST /api/students — always enrolls into a class in the current academic
 // year, and records that enrollment so this year's roster stays correct
@@ -27,10 +29,10 @@ const createStudent = asyncHandler(async (req, res) => {
     classId,
     firstName,
     lastName,
-    dob,
-    sex,
-    guardianName,
-    guardianPhone,
+    dob: dob || null,
+    sex: sex || null,
+    guardianName: guardianName || null,
+    guardianPhone: guardianPhone || null,
   });
 
   // The admission number is generated after the row exists so it can use
@@ -188,7 +190,17 @@ const listStudentsByClass = asyncHandler(async (req, res) => {
 
   const students = await getClassRoster(req.params.id);
 
-  res.json({ students });
+  // Flag anyone SBMS's discipline office has ever permanently dismissed —
+  // regardless of which term that decision was made in — so the manager
+  // can spot them at a glance in the class roster instead of having to
+  // open each student's report cards to find out.
+  const dismissedIds = await getPermanentlyDismissedStudentIds(students.map((s) => s.id));
+  const studentsWithDismissal = students.map((s) => ({
+    ...s.toJSON(),
+    dismissedPermanently: dismissedIds.has(s.id),
+  }));
+
+  res.json({ students: studentsWithDismissal });
 });
 
 // GET /api/classes/:id/students/pdf — manager's printable roster for a
@@ -233,6 +245,130 @@ const getClassStudentListPdf = asyncHandler(async (req, res) => {
     "Content-Disposition": `attachment; filename="students-${klass.name.replace(/\s+/g, "-")}.pdf"`,
   });
   res.send(pdfBuffer);
+});
+
+// GET /api/classes/:id/students/excel — a well-formatted, downloadable
+// roster for a single class (open to both managers and teachers, same
+// class-suspension guard as listStudentsByClass). Unlike the PDF version
+// this is meant to be worked with — reopened, filtered, sorted, pasted
+// elsewhere — so it's a plain styled worksheet rather than a print layout,
+// and it leads with the total headcount since that's the number a class
+// teacher usually needs at a glance.
+const getClassStudentListExcel = asyncHandler(async (req, res) => {
+  const klass = await Class.findOne({
+    where: { id: req.params.id, schoolId: req.schoolId },
+    include: [{ model: User, as: "classTeacher", attributes: ["name"] }],
+  });
+  if (!klass) throw ApiError.notFound("Class not found");
+  if (req.user.role === "teacher" && klass.isSuspended) {
+    throw ApiError.forbidden("This class has been suspended and is no longer available to teachers");
+  }
+
+  const school = await School.findByPk(req.schoolId);
+  const academicYear = await AcademicYear.findByPk(klass.academicYearId);
+  const students = await getClassRoster(req.params.id);
+  const boysCount = students.filter((s) => s.sex === "M").length;
+  const girlsCount = students.filter((s) => s.sex === "F").length;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = school?.name || "EduManage Pro";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Students", {
+    views: [{ state: "frozen", ySplit: 8, showGridLines: false }],
+    pageSetup: { orientation: "portrait", fitToPage: true, fitToWidth: 1 },
+  });
+
+  const TEAL_DARK = "FF0F766E";
+  const BORDER = { style: "thin", color: { argb: "FFCBD5E1" } };
+
+  sheet.columns = [
+    { width: 20 }, // Admission Number
+    { width: 34 }, // Student Names
+    { width: 12 }, // Sex
+  ];
+
+  // --- Header block ---
+  sheet.mergeCells("A1:C1");
+  const titleCell = sheet.getCell("A1");
+  titleCell.value = school?.name || "EduManage Pro";
+  titleCell.font = { bold: true, size: 15, color: { argb: TEAL_DARK } };
+  titleCell.alignment = { vertical: "middle" };
+  sheet.getRow(1).height = 26;
+
+  sheet.mergeCells("A2:C2");
+  const subtitleCell = sheet.getCell("A2");
+  subtitleCell.value = `Class Roster — ${klass.name}${academicYear ? ` (${academicYear.name})` : ""}`;
+  subtitleCell.font = { italic: true, size: 11, color: { argb: "FF475569" } };
+
+  sheet.getCell("A3").value = "Class Teacher:";
+  sheet.getCell("A3").font = { bold: true, size: 10 };
+  sheet.mergeCells("B3:C3");
+  sheet.getCell("B3").value = klass.classTeacher?.name || "—";
+  sheet.getCell("B3").font = { size: 10 };
+
+  sheet.getCell("A4").value = "Generated:";
+  sheet.getCell("A4").font = { bold: true, size: 10 };
+  sheet.mergeCells("B4:C4");
+  sheet.getCell("B4").value = new Date().toLocaleDateString();
+  sheet.getCell("B4").font = { size: 10 };
+
+  // Headline total/boys/girls banner, in the same teal used for the table
+  // header — the only place color shows up outside the header row.
+  sheet.mergeCells("A5:C5");
+  const totalCell = sheet.getCell("A5");
+  totalCell.value = `Total Students: ${students.length}   |   Boys: ${boysCount}   |   Girls: ${girlsCount}`;
+  totalCell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+  totalCell.alignment = { vertical: "middle", horizontal: "left" };
+  totalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_DARK } };
+  sheet.getRow(5).height = 22;
+
+  sheet.getRow(6).height = 6; // spacer
+
+  // --- Table header (row 8, matching the frozen split above) ---
+  const headerRow = sheet.getRow(8);
+  headerRow.values = ["Admission No.", "Student Names", "Sex"];
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, size: 10.5, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_DARK } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+  });
+
+  // Data rows stay plain white — color is reserved for the header/banner so
+  // the roster itself stays easy to read and print.
+  const firstDataRow = 9;
+  students.forEach((s, idx) => {
+    const rowNum = firstDataRow + idx;
+    const row = sheet.getRow(rowNum);
+    row.values = [
+      s.admissionNumber || "",
+      `${s.firstName} ${s.lastName}`,
+      s.sex === "M" ? "Male" : s.sex === "F" ? "Female" : "",
+    ];
+    row.eachCell((cell, colNumber) => {
+      cell.border = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 2 ? "left" : "center" };
+    });
+  });
+
+  if (students.length > 0) {
+    sheet.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8, column: 3 } };
+  } else {
+    sheet.mergeCells(`A${firstDataRow}:C${firstDataRow}`);
+    const emptyCell = sheet.getCell(`A${firstDataRow}`);
+    emptyCell.value = "No students enrolled in this class yet.";
+    emptyCell.font = { italic: true, size: 10, color: { argb: "FF94A3B8" } };
+    emptyCell.alignment = { horizontal: "center" };
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const safeClass = klass.name.replace(/[^a-z0-9]+/gi, "-");
+  res.set({
+    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "Content-Disposition": `attachment; filename="students-${safeClass}.xlsx"`,
+  });
+  res.send(Buffer.from(buffer));
 });
 
 // GET /api/students/roster/pdf?classId=&gender=all|M|F&academicYearId= — the
@@ -325,5 +461,7 @@ module.exports = {
   deleteStudent,
   listStudentsByClass,
   getClassStudentListPdf,
+  getClassStudentListExcel,
   getStudentRosterPdf,
+  getClassRoster,
 };

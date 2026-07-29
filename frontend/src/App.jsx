@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider } from "./context/AuthContext";
 import { YearProvider } from "./context/YearContext";
 import { MaintenanceProvider } from "./context/MaintenanceContext";
@@ -44,6 +45,7 @@ export default function App() {
       <ConfirmProvider>
       <NotifyProvider>
       <BrowserRouter>
+        <Toaster richColors position="top-right" closeButton />
         <Layout>
           <Routes>
             <Route path="/login" element={<Login />} />

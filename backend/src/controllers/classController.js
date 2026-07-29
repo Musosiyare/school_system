@@ -11,11 +11,13 @@ const {
   Term,
   TeacherModuleAssignment,
   Notification,
+  ClassModuleTermStatus,
 } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academicYear");
 const { logActivity } = require("../utils/activityLogger");
+const { getClassRoster } = require("./studentController");
 
 const CLASS_CATEGORIES = ["TSS", "GE"];
 
@@ -234,7 +236,22 @@ const listClasses = asyncHandler(async (req, res) => {
   // ones who manage suspension.
   const visible = req.user.role === "teacher" ? classes.filter((c) => !c.isSuspended) : classes;
 
-  res.json({ classes: visible });
+  // Attach total/boys/girls counts for each class so the Classes page can
+  // show them without a separate round trip per class. Uses the same
+  // enrollment-aware roster resolution as the student list/roster PDF, so
+  // the counts always match what a manager sees when they open a class.
+  const rosters = await Promise.all(visible.map((c) => getClassRoster(c.id)));
+  const classesWithCounts = visible.map((c, i) => {
+    const roster = rosters[i];
+    const boys = roster.filter((s) => s.sex === "M").length;
+    const girls = roster.filter((s) => s.sex === "F").length;
+    return {
+      ...c.toJSON(),
+      studentCounts: { total: roster.length, boys, girls },
+    };
+  });
+
+  res.json({ classes: classesWithCounts });
 });
 
 // GET /api/classes/:id — single class detail (used by the "Manage" modal)
@@ -445,7 +462,7 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
   const totalStudents = await Student.count({ where: { classId: klass.id } });
   const moduleIds = klass.ClassModules.map((cm) => cm.moduleId);
 
-  const [assignments, marks] = await Promise.all([
+  const [assignments, marks, disabledStatuses] = await Promise.all([
     moduleIds.length
       ? TeacherModuleAssignment.findAll({
           where: { classId: klass.id, moduleId: moduleIds },
@@ -455,15 +472,27 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
     moduleIds.length
       ? Mark.findAll({ where: { classId: klass.id, moduleId: moduleIds, termId }, attributes: ["moduleId"] })
       : [],
+    moduleIds.length
+      ? ClassModuleTermStatus.findAll({
+          where: { classId: klass.id, moduleId: moduleIds, termId, disabled: true },
+          attributes: ["moduleId"],
+        })
+      : [],
   ]);
 
   const assignmentByModule = Object.fromEntries(assignments.map((a) => [a.moduleId, a]));
+  const disabledModuleIds = new Set(disabledStatuses.map((s) => s.moduleId));
   const recordedCountByModule = {};
   marks.forEach((m) => {
     recordedCountByModule[m.moduleId] = (recordedCountByModule[m.moduleId] || 0) + 1;
   });
 
-  const modules = klass.ClassModules.map((cm) => {
+  // Modules a subject teacher has switched off for this specific term (e.g.
+  // it wasn't actually taught/tested) are excluded here entirely — they
+  // don't belong on report cards, don't need marks, and the class teacher
+  // shouldn't see them as "outstanding" or be able to send a reminder to
+  // chase marks that were never expected in the first place.
+  const modules = klass.ClassModules.filter((cm) => !disabledModuleIds.has(cm.moduleId)).map((cm) => {
     const assignment = assignmentByModule[cm.moduleId];
     const recordedCount = recordedCountByModule[cm.moduleId] || 0;
     const missingCount = Math.max(totalStudents - recordedCount, 0);

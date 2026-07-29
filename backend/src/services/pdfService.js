@@ -103,17 +103,9 @@ function overallGrade(weightedAverage) {
   return "FAIL";
 }
 
-// Each Overall Result grade gets its own color so it stands out at a
-// glance — same mapping the frontend applies (overallGradeColor in
-// Reports.jsx), so the PDF and the on-screen report agree.
-function overallGradeColor(weightedAverage) {
-  const grade = overallGrade(weightedAverage);
-  if (grade === "EXCELLENT") return "#1f7a4d"; // green
-  if (grade === "VERY GOOD") return "#1d4ed8"; // blue
-  if (grade === "PASS") return "#b45309"; // amber
-  if (grade === "FAIL") return "#b3403a"; // red
-  return "#6b7280"; // N/A — gray
-}
+// Overall Result is shown in plain black text — no color-coding — same
+// as the frontend's ReportCardTable.jsx, so the PDF and the on-screen
+// report agree.
 
 // ---------- Banner: centered title/term on top, then a two-column row
 // below — school name/location on the left, labeled student details
@@ -204,7 +196,7 @@ function letterhead(schoolName, schoolAddress, termName, admissionNumber, report
                     alignment: "right",
                   },
                   {
-                    text: `Class: ${classLabel(className || report.student?.class, classCategory ?? report.student?.classCategory)}`,
+                    text: `Class: ${className || report.student?.class || "-"}`,
                     bold: true,
                     fontSize: HEADER_FONT_SIZE,
                     color: BLACK,
@@ -361,12 +353,76 @@ function naNote(modules) {
 // second cutoff to keep in sync.
 function conductText(conduct) {
   if (!conduct) return "N/A";
-  return `${conduct.remaining}/${conduct.maxMarks} (${conduct.atRisk ? "Bad" : "Good"})`;
+  return `${conduct.remaining}/${conduct.maxMarks}`;
 }
 
-function conductColor(conduct) {
-  if (!conduct) return BLACK;
-  return conduct.atRisk ? "#C0392B" : "#1E7E34";
+// ---------- Deliberation tickbox grid — the one place on the report card
+// that states the student's overall behavior standing plainly: exactly one
+// of four boxes is ticked. Dismissal (from SBMS's shared decision) always
+// wins over the plain conduct reading, since it's the more serious, more
+// recent call; "Good"/"Bad" only apply when no dismissal has been
+// recorded this term. A "retained" decision doesn't get its own box — the
+// student was reviewed and kept, so it falls back to whatever the raw
+// conduct number already says (Good/Bad), same as if no decision existed
+// at all. ----------
+function deliberationState(report) {
+  const decision = report.dismissal?.decision;
+  if (decision === "dismissed_permanently") return "dismissed_permanently";
+  if (decision === "dismissed_term") return "dismissed_term";
+  if (!report.conduct) return null;
+  return report.conduct.atRisk ? "bad" : "good";
+}
+
+// Small bordered square, "X" centered when ticked — plain ASCII (not a
+// unicode checkbox glyph) since the PDF only ships Helvetica's standard
+// 14 fonts, which don't cover checkbox symbols.
+function tickboxCell(ticked) {
+  return {
+    table: { widths: [10], body: [[{ text: ticked ? "X" : "", bold: true, fontSize: 8, alignment: "center" }]] },
+    layout: {
+      hLineWidth: () => 1,
+      vLineWidth: () => 1,
+      hLineColor: () => BLACK,
+      vLineColor: () => BLACK,
+      paddingLeft: () => 1,
+      paddingRight: () => 1,
+      paddingTop: () => 1,
+      paddingBottom: () => 1,
+    },
+  };
+}
+
+function deliberationBox(report) {
+  const state = deliberationState(report);
+  if (!state) return null;
+  const labelCell = (text, color) => ({ text, fontSize: 8, color: color || BLACK, margin: [4, 1, 0, 0] });
+
+  return {
+    stack: [
+      sectionLabel("DELIBERATION", SECTION_TITLE_COLOR, 9),
+      {
+        table: {
+          widths: [10, "*", 10, "*"],
+          body: [
+            [
+              tickboxCell(state === "good"),
+              labelCell("Good behavior"),
+              tickboxCell(state === "bad"),
+              labelCell("Bad behavior"),
+            ],
+            [
+              tickboxCell(state === "dismissed_term"),
+              labelCell("Dismissed this term"),
+              tickboxCell(state === "dismissed_permanently"),
+              labelCell("Dismissed permanently"),
+            ],
+          ],
+        },
+        layout: plainLayout,
+      },
+    ],
+    margin: [0, 0, 0, 4],
+  };
 }
 
 function summaryStrip(report) {
@@ -382,7 +438,7 @@ function summaryStrip(report) {
         [
           { text: "WEIGHTED AVERAGE", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
           { text: "OVERALL RESULT", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
-          { text: "CLASS RANK", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
+          { text: "POSITION", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
           { text: "CONDUCT", bold: true, fontSize: 7.5, alignment: "center", color: BLACK, fillColor: WHITE },
         ],
         [
@@ -393,7 +449,7 @@ function summaryStrip(report) {
             alignment: "center",
             fillColor: PANEL_GREY,
           },
-          { text: overallGrade(report.weightedAverage), bold: true, fontSize: 11, alignment: "center", fillColor: PANEL_GREY, color: overallGradeColor(report.weightedAverage) },
+          { text: overallGrade(report.weightedAverage), bold: true, fontSize: 11, alignment: "center", fillColor: PANEL_GREY, color: BLACK },
           {
             text: rankText,
             bold: true,
@@ -407,7 +463,7 @@ function summaryStrip(report) {
             fontSize: 8.5,
             alignment: "center",
             fillColor: PANEL_GREY,
-            color: conductColor(report.conduct),
+            color: BLACK,
           },
         ],
       ],
@@ -611,6 +667,7 @@ function reportCardContent(report, schoolName, schoolAddress, className, termNam
         moduleTable(report.modules),
         naNote(report.modules),
         summaryStrip(report),
+        deliberationBox(report),
         // Signatures + footer are wrapped together as ONE unbreakable unit.
         // Previously the footer was a separate block right after signatures
         // — when signatures just barely fit at the bottom of a page,
@@ -1054,7 +1111,7 @@ function generateStudentListPdf(data, schoolName = "School Name") {
       { text: String(idx + 1), fontSize: 9, alignment: "center" },
       { text: r.admissionNumber || "-", fontSize: 9 },
       { text: r.name, fontSize: 9, bold: true },
-      { text: r.dob || "-", fontSize: 9, alignment: "center" },
+      { text: r.dob || "N/A", fontSize: 9, alignment: "center" },
       { text: r.sex || "-", fontSize: 9, alignment: "center" },
       { text: r.guardianName || "-", fontSize: 9 },
       { text: r.guardianPhone || "-", fontSize: 9 },
@@ -1175,7 +1232,7 @@ function generateStudentRosterPdf(data, schoolName = "School Name") {
       { text: String(idx + 1), fontSize: 9, alignment: "center" },
       { text: r.admissionNumber || "-", fontSize: 9 },
       { text: r.name, fontSize: 9, bold: true },
-      { text: r.dob || "-", fontSize: 9, alignment: "center" },
+      { text: r.dob || "N/A", fontSize: 9, alignment: "center" },
       { text: r.sex || "-", fontSize: 9, alignment: "center" },
       ...(isSchoolWide ? [{ text: r.className || "-", fontSize: 9 }] : []),
     ]),

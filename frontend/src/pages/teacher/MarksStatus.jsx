@@ -7,6 +7,7 @@ import Modal from "../../components/ui/Modal";
 import Button from "../../components/ui/Button";
 import { Field, Select, Textarea } from "../../components/ui/FormField";
 import { useNotify } from "../../components/ui/NotifyProvider";
+import { useConfirm } from "../../components/ui/ConfirmProvider";
 import {
   BellRing,
   RefreshCcw,
@@ -16,6 +17,7 @@ import {
   Lock,
   ChevronDown,
   UserCheck,
+  Users,
 } from "lucide-react";
 
 // Builds one short, clean reminder that covers every outstanding module for
@@ -41,6 +43,7 @@ Thanks!`;
 export default function MarksStatus() {
   const { user } = useAuth();
   const notify = useNotify();
+  const confirm = useConfirm();
 
   const [classesTaught, setClassesTaught] = useState([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
@@ -63,6 +66,9 @@ export default function MarksStatus() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [notifyMessage, setNotifyMessage] = useState("");
   const [sendingNotify, setSendingNotify] = useState(false);
+  // classId currently sending a bulk "Notify All" reminder — used to disable
+  // that class's button and show a loading label while it's in flight.
+  const [sendingAllClassId, setSendingAllClassId] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -228,6 +234,49 @@ export default function MarksStatus() {
     }
   }
 
+  // Sends every outstanding teacher in a class their own reminder (each
+  // still only listing their own modules) in one go, instead of the class
+  // teacher opening the modal and clicking send once per teacher.
+  async function sendAllReminders(classId, className, termName, teacherGroups) {
+    if (teacherGroups.length === 0) return;
+    const ok = await confirm({
+      title: teacherGroups.length === 1 ? "Notify this teacher?" : "Notify all teachers?",
+      message: `Send a reminder to ${teacherGroups.length} teacher${
+        teacherGroups.length === 1 ? "" : "s"
+      } with outstanding marks in ${className} — ${termName}?`,
+      confirmText: teacherGroups.length === 1 ? "Notify" : "Notify All",
+    });
+    if (!ok) return;
+
+    setSendingAllClassId(classId);
+    try {
+      await Promise.all(
+        teacherGroups.map((group) =>
+          api.post("/notifications", {
+            recipientId: group.teacherId,
+            classId,
+            termId: Number(selectedTermId),
+            message: buildReminderMessage(group.teacherName, className, termName, group.modules),
+          })
+        )
+      );
+      setSentKeys((prev) => {
+        const next = new Set(prev);
+        teacherGroups.forEach((g) => next.add(`${classId}:${g.teacherId}`));
+        return next;
+      });
+      await notify({
+        title: "Reminders sent",
+        message: `Notified ${teacherGroups.length} teacher${teacherGroups.length === 1 ? "" : "s"} for ${className}.`,
+        tone: "info",
+      });
+    } catch (err) {
+      await notify({ title: "Couldn't send all reminders", message: err.message, tone: "error" });
+    } finally {
+      setSendingAllClassId(null);
+    }
+  }
+
   if (!loadingClasses && classesTaught.length === 0) {
     return (
       <Card title="Marks Recording Status">
@@ -359,6 +408,27 @@ export default function MarksStatus() {
 
                         {/* One row per subject teacher, covering every outstanding module of
                             theirs at once — a single reminder instead of one per module. */}
+                        {teacherGroups.length > 0 && (() => {
+                          const allSent = teacherGroups.every((g) => sentKeys.has(`${c.id}:${g.teacherId}`));
+                          const sendingAll = sendingAllClassId === c.id;
+                          return (
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                                <Users size={13} />
+                                {teacherGroups.length} teacher{teacherGroups.length === 1 ? "" : "s"} with outstanding marks
+                              </p>
+                              <Button
+                                size="sm"
+                                variant={allSent ? "teal" : "secondary"}
+                                disabled={sendingAll}
+                                onClick={() => sendAllReminders(c.id, c.name, data.termName, teacherGroups)}
+                              >
+                                {allSent ? <RefreshCcw size={13} /> : <BellRing size={13} />}
+                                {sendingAll ? "Sending..." : allSent ? "Re-notify All" : "Notify All"}
+                              </Button>
+                            </div>
+                          );
+                        })()}
                         {teacherGroups.map((group) => {
                           const alreadySent = sentKeys.has(`${c.id}:${group.teacherId}`);
                           return (

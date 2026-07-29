@@ -32,12 +32,13 @@ import {
   Users,
   Info,
   ArrowRight,
+  Ban,
 } from "lucide-react";
 
 const emptyForm = { firstName: "", lastName: "", dob: "", sex: "", guardianName: "", guardianPhone: "" };
 
 function formatDob(dob) {
-  if (!dob) return "-";
+  if (!dob) return "N/A";
   return new Date(dob).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
@@ -201,6 +202,8 @@ export default function Students() {
   }
 
   const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
+  const boysCount = students.filter((s) => s.sex === "M").length;
+  const girlsCount = students.filter((s) => s.sex === "F").length;
 
   // Source-class options for pulling: any class NOT in the year currently
   // being viewed (pulling is for bringing students in from another year —
@@ -349,17 +352,17 @@ export default function Students() {
     }
   }, [highlightId, page]);
 
-  function downloadStudentListPdf() {
+  function downloadStudentListExcel() {
     if (!selectedClassId) return;
     const token = localStorage.getItem("token");
-    fetch(`${api.defaults.baseURL}/classes/${selectedClassId}/students/pdf`, {
+    fetch(`${api.defaults.baseURL}/classes/${selectedClassId}/students/excel`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.blob())
       .then((blob) => {
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `students-${selectedClass?.name || "class"}.pdf`;
+        link.download = `students-${selectedClass?.name || "class"}.xlsx`;
         link.click();
       });
   }
@@ -426,12 +429,25 @@ export default function Students() {
                 placeholder="Search by name, ID, or guardian..."
                 className="w-full sm:w-64"
               />
-              <Button size="sm" variant="teal" onClick={downloadStudentListPdf} disabled={students.length === 0}>
-                <FileDown size={14} /> Download List (PDF)
+              <Button size="sm" variant="teal" onClick={downloadStudentListExcel} disabled={students.length === 0}>
+                <FileDown size={14} /> Get List
               </Button>
             </div>
           }
         >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 border border-slate-200 px-3.5 py-2.5 mb-4 text-sm">
+            <span className="font-semibold text-slate-700">
+              {students.length} Total Student{students.length === 1 ? "" : "s"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-slate-600">
+              <span className="h-2 w-2 rounded-full bg-blue-400" />
+              {boysCount} Boys
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-slate-600">
+              <span className="h-2 w-2 rounded-full bg-rose-400" />
+              {girlsCount} Girls
+            </span>
+          </div>
           <Table>
             <Thead>
               <tr>
@@ -459,11 +475,28 @@ export default function Students() {
                 <tr
                   key={s.id}
                   ref={s.id === highlightId ? highlightRowRef : undefined}
-                  className={s.id === highlightId ? "bg-amber-50 ring-1 ring-inset ring-amber-300 transition-colors duration-1000" : undefined}
+                  className={
+                    s.id === highlightId
+                      ? "bg-amber-50 ring-1 ring-inset ring-amber-300 transition-colors duration-1000"
+                      : s.dismissedPermanently
+                      ? "bg-red-50/60"
+                      : undefined
+                  }
                 >
                   <Td className="font-mono text-slate-500">{s.admissionNumber || "-"}</Td>
                   <Td className="font-medium text-slate-800">
-                    {s.firstName} {s.lastName}
+                    <div className="flex items-center gap-2">
+                      <span>
+                        {s.firstName} {s.lastName}
+                      </span>
+                      {s.dismissedPermanently && (
+                        <span title="Dismissed permanently" className="shrink-0">
+                          <Badge tone="fail">
+                            <Ban size={11} /> Dismissed
+                          </Badge>
+                        </span>
+                      )}
+                    </div>
                   </Td>
                   <Td>{formatDob(s.dob)}</Td>
                   <Td>{sexLabel(s.sex)}</Td>

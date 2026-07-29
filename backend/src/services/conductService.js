@@ -37,4 +37,64 @@ async function getTermConductScore(studentId, termId) {
   };
 }
 
-module.exports = { MARKS_PER_TERM, getTermConductScore };
+/**
+ * The discipline office's termly call on this student, if one's been made
+ * — sourced live from SBMS's shared sbms_deliberations table, same
+ * raw-query-not-a-Model approach as getTermConductScore above and for the
+ * exact same reason (see the file-level note): a Model here would get
+ * pulled into SRS's sequelize.sync() and, under DB_SYNC_ALTER=true, could
+ * alter/destroy columns this side doesn't own.
+ *
+ * One row per student+term in SBMS (unique on student_id+term_id), so this
+ * is at most one decision: "dismissed_permanently" (expelled outright),
+ * "dismissed_term" (out for the rest of this term only), or "retained"
+ * (reviewed and kept enrolled despite exceeding marks). No row at all
+ * means the discipline office hasn't ruled on this student this term —
+ * distinct from "retained", which means they looked and chose to keep the
+ * student.
+ */
+async function getTermDismissalDecision(studentId, termId) {
+  const [row] = await sequelize.query(
+    `SELECT decision, reason, decided_at AS decidedAt
+     FROM sbms_deliberations
+     WHERE student_id = :studentId AND term_id = :termId
+     LIMIT 1`,
+    { replacements: { studentId, termId }, type: QueryTypes.SELECT }
+  );
+  if (!row) return null;
+  return {
+    decision: row.decision,
+    reason: row.reason || null,
+    decidedAt: row.decidedAt,
+  };
+}
+
+/**
+ * Bulk check across ALL terms for which of the given students have ever
+ * received a "dismissed_permanently" decision from SBMS's discipline
+ * office. Unlike getTermDismissalDecision (scoped to one term, used for a
+ * single report card), a permanent dismissal isn't term-scoped by
+ * definition — once expelled, that stays true no matter which term is
+ * being looked at — so this is what powers the "dismissed permanently"
+ * flag/badge on student list views. Same raw-query-not-a-Model approach
+ * as the rest of this file (see file-level note above).
+ */
+async function getPermanentlyDismissedStudentIds(studentIds) {
+  const ids = [...new Set(studentIds || [])];
+  if (ids.length === 0) return new Set();
+
+  const rows = await sequelize.query(
+    `SELECT DISTINCT student_id AS "studentId"
+     FROM sbms_deliberations
+     WHERE decision = 'dismissed_permanently' AND student_id IN (:ids)`,
+    { replacements: { ids }, type: QueryTypes.SELECT }
+  );
+  return new Set(rows.map((r) => r.studentId));
+}
+
+module.exports = {
+  MARKS_PER_TERM,
+  getTermConductScore,
+  getTermDismissalDecision,
+  getPermanentlyDismissedStudentIds,
+};
