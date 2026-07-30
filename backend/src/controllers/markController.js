@@ -3,7 +3,6 @@ const { Mark, TeacherModuleAssignment, Term, Module, Student, Class, School, Use
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { assertCurrentYear } = require("../utils/academicYear");
-const { generateMarksEvidencePdf } = require("../services/pdfService");
 const { logActivity } = require("../utils/activityLogger");
 
 async function assertTeacherIsAssigned(userId, role, moduleId, classId) {
@@ -374,10 +373,10 @@ const importMarksTemplate = asyncHandler(async (req, res) => {
   res.status(201).json({ marks: results, imported: results.length, warnings });
 });
 
-// GET /api/marks/evidence/pdf?classId=&moduleId=&termId= — a teacher's proof
-// of what they recorded for a module/class/term. Lists every student in the
-// class (not just those with a score), so gaps are visible as evidence too.
-const getMarksEvidencePdf = asyncHandler(async (req, res) => {
+// Shared by both the PDF and Excel marksheet exports below, so a query
+// param check, the "who's the teacher" lookup, and the row-shaping logic
+// can't drift between the two formats.
+async function loadMarksEvidenceData(req) {
   const { classId, moduleId, termId } = req.query;
   if (!classId || !moduleId || !termId) {
     throw ApiError.badRequest("classId, moduleId and termId query params are required");
@@ -416,32 +415,150 @@ const getMarksEvidencePdf = asyncHandler(async (req, res) => {
     score: scoreByStudent[s.id] ?? null,
   }));
 
-  const pdfBuffer = await generateMarksEvidencePdf(
-    {
-      moduleTitle: module.moduleTitle,
-      moduleCode: module.moduleCode,
-      className: klass.name,
-      termName: term.name,
-      teacherName,
-      maxScore: module.maxScore,
-      passingLine: module.passingLine,
-      rows,
-      generatedAt: new Date().toLocaleDateString(),
-    },
-    school.name
-  );
+  return { classId, moduleId, termId, klass, module, term, school, teacherName, rows };
+}
 
-  res.set({
-    "Content-Type": "application/pdf",
-    "Content-Disposition": `attachment; filename="marks-evidence-class${classId}-module${moduleId}-term${termId}.pdf"`,
+// GET /api/marks/evidence/excel?classId=&moduleId=&termId= — the marksheet
+// as an .xlsx, styled to match the class roster export (teal header banner,
+// plain white bordered rows) so a teacher can reopen, sort, or paste it
+// elsewhere. Refuses to generate a sheet with nothing recorded on it yet.
+const getMarksEvidenceExcel = asyncHandler(async (req, res) => {
+  const { classId, moduleId, termId, klass, module, term, school, teacherName, rows } =
+    await loadMarksEvidenceData(req);
+
+  const recordedCount = rows.filter((r) => r.score !== null).length;
+  if (recordedCount === 0) {
+    throw ApiError.badRequest(
+      "No marks have been recorded yet for this module/class/term — there's nothing to put on a marksheet."
+    );
+  }
+  const passCount = rows.filter((r) => r.score !== null && r.score >= module.passingLine).length;
+  const average =
+    recordedCount > 0
+      ? +(rows.reduce((sum, r) => sum + (r.score ?? 0), 0) / recordedCount).toFixed(2)
+      : null;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = school?.name || "EduManage Pro";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Marksheet", {
+    views: [{ state: "frozen", ySplit: 8, showGridLines: false }],
+    pageSetup: { orientation: "portrait", fitToPage: true, fitToWidth: 1 },
   });
-  res.send(pdfBuffer);
+
+  const TEAL_DARK = "FF0F766E";
+  const BORDER = { style: "thin", color: { argb: "FFCBD5E1" } };
+  const GREEN = "FF1F7A4D";
+  const RED = "FFB3403A";
+  const BLUE = "FF1D4ED8";
+
+  sheet.columns = [
+    { width: 6 }, // #
+    { width: 30 }, // Student
+    { width: 20 }, // Admission No.
+    { width: 16 }, // Score
+    { width: 18 }, // Status
+  ];
+
+  // --- Header block ---
+  sheet.mergeCells("A1:E1");
+  const titleCell = sheet.getCell("A1");
+  titleCell.value = school?.name || "EduManage Pro";
+  titleCell.font = { bold: true, size: 15, color: { argb: TEAL_DARK } };
+  titleCell.alignment = { vertical: "middle" };
+  sheet.getRow(1).height = 26;
+
+  sheet.mergeCells("A2:E2");
+  const subtitleCell = sheet.getCell("A2");
+  subtitleCell.value = `Marks Evidence Report — ${module.moduleTitle}${
+    module.moduleCode ? ` (${module.moduleCode})` : ""
+  } · ${klass.name} · ${term.name}`;
+  subtitleCell.font = { italic: true, size: 11, color: { argb: "FF475569" } };
+
+  sheet.getCell("A3").value = "Teacher:";
+  sheet.getCell("A3").font = { bold: true, size: 10 };
+  sheet.mergeCells("B3:E3");
+  sheet.getCell("B3").value = teacherName;
+  sheet.getCell("B3").font = { size: 10 };
+
+  sheet.getCell("A4").value = "Generated:";
+  sheet.getCell("A4").font = { bold: true, size: 10 };
+  sheet.mergeCells("B4:E4");
+  sheet.getCell("B4").value = new Date().toLocaleDateString();
+  sheet.getCell("B4").font = { size: 10 };
+
+  // Headline recorded/average/passing banner, in the same teal used for the
+  // table header — the only place color shows up outside the header row.
+  sheet.mergeCells("A5:E5");
+  const summaryCell = sheet.getCell("A5");
+  summaryCell.value = `Recorded: ${recordedCount} / ${rows.length}   |   Class Average: ${
+    average !== null ? `${average} / ${module.maxScore}` : "—"
+  }   |   Passing: ${recordedCount > 0 ? `${passCount} / ${recordedCount}` : "—"}`;
+  summaryCell.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+  summaryCell.alignment = { vertical: "middle", horizontal: "left" };
+  summaryCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_DARK } };
+  sheet.getRow(5).height = 22;
+
+  sheet.getRow(6).height = 6; // spacer
+
+  // --- Table header (row 8, matching the frozen split above) ---
+  const headerRow = sheet.getRow(8);
+  headerRow.values = ["#", "Student", "Admission No.", `Score (0-${module.maxScore})`, "Status"];
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, size: 10.5, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_DARK } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+  });
+
+  // Data rows stay plain white — color is reserved for the header/banner so
+  // the marksheet itself stays easy to read and print, with only the status
+  // text (not its cell background) picking up green/red/blue.
+  const firstDataRow = 9;
+  rows.forEach((r, idx) => {
+    const rowNum = firstDataRow + idx;
+    const row = sheet.getRow(rowNum);
+    const statusText = r.score === null ? "NOT RECORDED" : r.score >= module.passingLine ? "PASS" : "FAIL";
+    const statusColor = r.score === null ? BLUE : r.score >= module.passingLine ? GREEN : RED;
+    row.values = [
+      idx + 1,
+      r.studentName,
+      r.admissionNumber || "-",
+      r.score === null ? "N/A" : `${r.score} / ${module.maxScore}`,
+      statusText,
+    ];
+    row.eachCell((cell, colNumber) => {
+      cell.border = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 2 ? "left" : "center" };
+      if (colNumber === 5) cell.font = { bold: true, color: { argb: statusColor } };
+    });
+  });
+
+  if (rows.length === 0) {
+    sheet.mergeCells(`A${firstDataRow}:E${firstDataRow}`);
+    const emptyCell = sheet.getCell(`A${firstDataRow}`);
+    emptyCell.value = "No students in this class yet.";
+    emptyCell.font = { italic: true, size: 10, color: { argb: "FF94A3B8" } };
+    emptyCell.alignment = { horizontal: "center" };
+  } else {
+    sheet.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8, column: 5 } };
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const safeModule = module.moduleTitle.replace(/[^a-z0-9]+/gi, "-");
+  const safeClass = klass.name.replace(/[^a-z0-9]+/gi, "-");
+  res.set({
+    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "Content-Disposition": `attachment; filename="marksheet-${safeClass}-${safeModule}-term${termId}.xlsx"`,
+  });
+  res.send(Buffer.from(buffer));
 });
 
 module.exports = {
   submitMarks,
   getMarks,
-  getMarksEvidencePdf,
+  getMarksEvidenceExcel,
   downloadMarksTemplate,
   importMarksTemplate,
 };

@@ -33,6 +33,7 @@ import {
   CalendarClock,
   SlidersHorizontal,
   ShieldAlert,
+  ChevronDown,
 } from "lucide-react";
 
 const ROLE_META = {
@@ -44,35 +45,99 @@ const ROLE_META = {
   teacher: { label: "Teacher", accent: "bg-brand-500", text: "text-brand-500", ring: "ring-brand-200", tint: "bg-brand-50 border-brand-100", hover: "hover:bg-brand-100/70" },
 };
 
+// Each role's nav is a mix of standalone links and groups. A group shows as
+// one row (icon + label + chevron); hovering or clicking it reveals its
+// items. This is what keeps a role with 10+ destinations from turning into
+// one long, hard-to-scan list.
 const NAV = {
   superuser: [
-    { to: "/superuser", label: "Schools", icon: School },
-    { to: "/superuser/activity", label: "Activity", icon: History },
-    { to: "/superuser/profile", label: "Profile", icon: UserCog },
+    { type: "link", to: "/superuser", label: "Schools", icon: School },
+    { type: "link", to: "/superuser/activity", label: "Activity", icon: History },
+    { type: "link", to: "/superuser/profile", label: "Profile", icon: UserCog },
   ],
   manager: [
-    { to: "/manager", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/manager/academic-years", label: "Academic Years", icon: CalendarRange },
-    { to: "/manager/classes", label: "Classes", icon: Layers },
-    { to: "/manager/modules", label: "Modules", icon: BookOpen },
-    { to: "/manager/teachers", label: "Teachers", icon: Users },
-    { to: "/manager/disciplinary-staff", label: "Disciplinary Staff", icon: ShieldAlert },
-    { to: "/manager/students", label: "Students", icon: GraduationCap },
-    { to: "/manager/assignments", label: "Assignments", icon: ClipboardList },
-    { to: "/manager/reports", label: "Reports", icon: FileText },
-    { to: "/manager/statistics", label: "Statistics", icon: BarChart3 },
-    { to: "/manager/activity", label: "Activity", icon: History },
-    { to: "/manager/profile", label: "Profile", icon: UserCog },
+    { type: "link", to: "/manager", label: "Dashboard", icon: LayoutDashboard },
+    {
+      type: "group",
+      id: "academics",
+      label: "Academics",
+      icon: BookOpen,
+      accent: "from-blue-400 to-blue-600",
+      tint: "bg-blue-50/60 border-blue-100",
+      items: [
+        { to: "/manager/academic-years", label: "Academic Years", icon: CalendarRange },
+        { to: "/manager/classes", label: "Classes", icon: Layers },
+        { to: "/manager/modules", label: "Modules", icon: BookOpen },
+        { to: "/manager/assignments", label: "Assignments", icon: ClipboardList },
+      ],
+    },
+    {
+      type: "group",
+      id: "people",
+      label: "People",
+      icon: Users,
+      accent: "from-violet-400 to-violet-600",
+      tint: "bg-violet-50/60 border-violet-100",
+      items: [
+        { to: "/manager/teachers", label: "Teachers", icon: Users },
+        { to: "/manager/disciplinary-staff", label: "Disciplinary Staff", icon: ShieldAlert },
+        { to: "/manager/students", label: "Students", icon: GraduationCap },
+      ],
+    },
+    {
+      type: "group",
+      id: "insights",
+      label: "Insights",
+      icon: BarChart3,
+      accent: "from-amber-400 to-amber-600",
+      tint: "bg-amber-50/60 border-amber-100",
+      items: [
+        { to: "/manager/reports", label: "Reports", icon: FileText },
+        { to: "/manager/statistics", label: "Statistics", icon: BarChart3 },
+        { to: "/manager/activity", label: "Activity", icon: History },
+      ],
+    },
+    { type: "link", to: "/manager/profile", label: "Profile", icon: UserCog },
   ],
   teacher: [
-    { to: "/teacher", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/teacher/marks", label: "Record Marks", icon: PencilLine },
-    { to: "/teacher/marks-status", label: "Marks Status", icon: BellRing },
-    { to: "/teacher/module-status", label: "Module Status", icon: SlidersHorizontal },
-    { to: "/teacher/reports", label: "Reports", icon: FileText },
-    { to: "/teacher/past-years", label: "Past Years", icon: CalendarClock },
-    { to: "/teacher/activity", label: "Activity", icon: History },
-    { to: "/teacher/profile", label: "Profile", icon: UserCog },
+    { type: "link", to: "/teacher", label: "Dashboard", icon: LayoutDashboard },
+    {
+      type: "group",
+      id: "marks",
+      label: "Marks",
+      icon: PencilLine,
+      accent: "from-teal-400 to-teal-600",
+      tint: "bg-teal-50/60 border-teal-100",
+      items: [
+        { to: "/teacher/marks", label: "Record Marks", icon: PencilLine },
+        { to: "/teacher/marks-status", label: "Marks Status", icon: BellRing },
+        { to: "/teacher/module-status", label: "Module Status", icon: SlidersHorizontal },
+      ],
+    },
+    {
+      type: "group",
+      id: "reports",
+      label: "Reports",
+      icon: FileText,
+      accent: "from-blue-400 to-blue-600",
+      tint: "bg-blue-50/60 border-blue-100",
+      items: [
+        { to: "/teacher/reports", label: "Reports", icon: FileText },
+        { to: "/teacher/past-years", label: "Past Years", icon: CalendarClock },
+      ],
+    },
+    {
+      type: "group",
+      id: "account",
+      label: "Account",
+      icon: UserCog,
+      accent: "from-violet-400 to-violet-600",
+      tint: "bg-violet-50/60 border-violet-100",
+      items: [
+        { to: "/teacher/activity", label: "Activity", icon: History },
+        { to: "/teacher/profile", label: "Profile", icon: UserCog },
+      ],
+    },
   ],
 };
 
@@ -152,6 +217,15 @@ const PAGE_META = {
   },
 };
 
+function findGroupIdForPath(user, pathname) {
+  if (!user) return null;
+  const entries = NAV[user.role] || [];
+  const group = entries.find(
+    (entry) => entry.type === "group" && entry.items.some((i) => i.to === pathname)
+  );
+  return group?.id ?? null;
+}
+
 // Nav links that only make sense for a class teacher — Reports shows only
 // their own class(es) and Marks Status shows who in their class(es) hasn't
 // finished recording marks. A subject teacher who isn't a class teacher for
@@ -173,6 +247,15 @@ export default function Layout({ children }) {
   // link that leads to an empty page; flips true once we confirm they're a
   // class teacher for at least one class this year.
   const [isClassTeacher, setIsClassTeacher] = useState(false);
+
+  // Which nav group is expanded. Set by clicking a group's header, and kept
+  // in sync with whichever group contains the current page so navigating
+  // never leaves you looking at a collapsed menu.
+  const [openGroupId, setOpenGroupId] = useState(() => findGroupIdForPath(user, location.pathname));
+
+  useEffect(() => {
+    setOpenGroupId(findGroupIdForPath(user, location.pathname));
+  }, [location.pathname, user?.role]);
 
   useEffect(() => {
     if (!user || user.role !== "teacher") return;
@@ -215,9 +298,15 @@ export default function Layout({ children }) {
   }
 
   const meta = ROLE_META[user.role];
-  const navItems = (NAV[user.role] || []).filter(
-    (item) => isClassTeacher || !CLASS_TEACHER_ONLY_LINKS.has(item.to)
-  );
+  const navItems = (NAV[user.role] || [])
+    .map((entry) => {
+      if (entry.type !== "group") return entry;
+      const items = entry.items.filter(
+        (item) => isClassTeacher || !CLASS_TEACHER_ONLY_LINKS.has(item.to)
+      );
+      return { ...entry, items };
+    })
+    .filter((entry) => (entry.type === "group" ? entry.items.length > 0 : isClassTeacher || !CLASS_TEACHER_ONLY_LINKS.has(entry.to)));
   const pageMeta = PAGE_META[location.pathname] || {};
   const pageTitle =
     typeof pageMeta.title === "function" ? pageMeta.title(user) : pageMeta.title || meta.label;
@@ -246,6 +335,122 @@ export default function Layout({ children }) {
     }
   }
 
+  // Renders one nav entry: a plain link, or a group whose items expand
+  // inline (normal width) or as a hover flyout (collapsed, icon-only width).
+  function renderNavEntry(entry, isCollapsed) {
+    if (entry.type === "link") {
+      const Icon = entry.icon;
+      const active = location.pathname === entry.to;
+      return (
+        <Link
+          key={entry.to}
+          to={entry.to}
+          title={isCollapsed ? entry.label : undefined}
+          onClick={() => setMobileNavOpen(false)}
+          className={`flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors
+            ${isCollapsed ? "justify-center px-2" : "px-3"}
+            ${active ? `${meta.accent} text-white` : "text-slate-600 hover:bg-slate-100"}`}
+        >
+          <Icon size={17} className="shrink-0" />
+          {!isCollapsed && entry.label}
+        </Link>
+      );
+    }
+
+    // Group — expand/collapse is click-only (no hover), with a gradient
+    // icon badge and a soft tinted panel for its items.
+    const Icon = entry.icon;
+    const groupActive = entry.items.some((i) => i.to === location.pathname);
+    const expanded = openGroupId === entry.id;
+
+    return (
+      <div key={entry.id} className="relative">
+        <button
+          type="button"
+          title={isCollapsed ? entry.label : undefined}
+          onClick={() => setOpenGroupId((prev) => (prev === entry.id ? null : entry.id))}
+          aria-expanded={expanded}
+          className={`w-full flex items-center gap-2.5 rounded-lg py-1.5 text-sm font-medium transition-colors
+            ${isCollapsed ? "justify-center px-1.5" : "pl-1.5 pr-2.5"}
+            ${expanded || groupActive ? `${entry.tint} border` : "border border-transparent text-slate-600 hover:bg-slate-100"}`}
+        >
+          <span
+            className={`h-7 w-7 shrink-0 rounded-lg flex items-center justify-center bg-gradient-to-br ${entry.accent} text-white shadow-sm transition-transform duration-200 ${expanded ? "scale-105" : ""}`}
+          >
+            <Icon size={15} />
+          </span>
+          {!isCollapsed && (
+            <>
+              <span className={`flex-1 text-left truncate ${expanded || groupActive ? "text-slate-800" : ""}`}>
+                {entry.label}
+              </span>
+              <ChevronDown
+                size={15}
+                className={`shrink-0 transition-transform text-slate-400 ${expanded ? "rotate-180" : ""}`}
+              />
+            </>
+          )}
+        </button>
+
+        {/* Expanded sidebar: items appear inline, in a soft tinted card under the group */}
+        {!isCollapsed && expanded && (
+          <div className={`mt-1 rounded-xl border ${entry.tint} p-1.5 space-y-0.5`}>
+            {entry.items.map((item) => {
+              const ItemIcon = item.icon;
+              const active = location.pathname === item.to;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileNavOpen(false)}
+                  className={`flex items-center gap-2.5 rounded-lg pl-1.5 pr-3 py-1.5 text-sm font-medium transition-colors
+                    ${active ? "bg-white shadow-sm text-slate-800" : "text-slate-600 hover:bg-white/70"}`}
+                >
+                  <span
+                    className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center transition-colors
+                      ${active ? `bg-gradient-to-br ${entry.accent} text-white` : "bg-white/80 text-slate-400"}`}
+                  >
+                    <ItemIcon size={13} />
+                  </span>
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Collapsed sidebar: no room to expand inline, so a click reveals a
+            flyout panel to the right instead. */}
+        {isCollapsed && expanded && (
+          <div className="absolute left-full top-0 ml-1.5 w-56 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden py-1.5 z-50">
+            <p className={`mx-1.5 mb-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-white bg-gradient-to-br ${entry.accent}`}>
+              {entry.label}
+            </p>
+            {entry.items.map((item) => {
+              const ItemIcon = item.icon;
+              const active = location.pathname === item.to;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setOpenGroupId(null);
+                  }}
+                  className={`mx-1.5 flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                    ${active ? `${entry.tint} border text-slate-800` : "text-slate-600 hover:bg-slate-50"}`}
+                >
+                  <ItemIcon size={15} className="shrink-0 text-slate-400" />
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderSidebarContent(isCollapsed) {
     return (
       <>
@@ -267,26 +472,18 @@ export default function Layout({ children }) {
           </button>
         </div>
 
+        {/* Academic year switcher — moved here from the top header so it
+            lives alongside the rest of the navigation. Hidden while
+            collapsed (a <select> has no useful icon-only form). */}
+        {user.role === "manager" && !isCollapsed && (
+          <div className="px-3 pt-3">
+            <YearSwitcher />
+          </div>
+        )}
+
         <nav className="flex-1 px-3 py-4 overflow-y-auto flex flex-col">
           <div className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = location.pathname === item.to;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  title={isCollapsed ? item.label : undefined}
-                  onClick={() => setMobileNavOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors
-                    ${isCollapsed ? "justify-center px-2" : "px-3"}
-                    ${active ? `${meta.accent} text-white` : "text-slate-600 hover:bg-slate-100"}`}
-                >
-                  <Icon size={17} className="shrink-0" />
-                  {!isCollapsed && item.label}
-                </Link>
-              );
-            })}
+            {navItems.map((entry) => renderNavEntry(entry, isCollapsed))}
           </div>
 
           <div className={`mt-4 rounded-xl border ${meta.tint} p-3`}>
@@ -391,8 +588,6 @@ export default function Layout({ children }) {
           </div>
 
           {user.role === "manager" && <GlobalSearch />}
-
-          {user.role === "manager" && <YearSwitcher />}
 
           {(user.role === "teacher" || user.role === "manager") && <NotificationBell />}
 

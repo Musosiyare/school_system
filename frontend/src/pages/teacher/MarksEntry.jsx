@@ -10,7 +10,7 @@ import Modal from "../../components/ui/Modal";
 import { Field, Input } from "../../components/ui/FormField";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
-import { Pencil, X, Download, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2, Check } from "lucide-react";
+import { Pencil, X, Lock, Unlock, Users, BarChart3, Award, FileSpreadsheet, Upload, UploadCloud, ChevronDown, PowerOff, SlidersHorizontal, FileCheck2, Check } from "lucide-react";
 
 // Custom dropdown for the Module/Class picker. A native <select> can't color
 // part of an option's text and leave the rest black — the whole <option> is
@@ -492,23 +492,34 @@ export default function MarksEntry() {
 
   const fieldsDisabled = isTermLocked || moduleDisabled || !editMode || saving;
 
-  function downloadEvidencePdf() {
+  function downloadEvidenceExcel() {
+    if (!hasSavedMarks) {
+      toast.error("No marks have been recorded yet for this module/class/term — there's nothing to put on a marksheet.");
+      return;
+    }
     const token = localStorage.getItem("token");
     const params = new URLSearchParams({
       classId: currentAssignment.classId,
       moduleId: currentAssignment.moduleId,
       termId: selectedTermId,
     });
-    fetch(`${api.defaults.baseURL}/marks/evidence/pdf?${params}`, {
+    fetch(`${api.defaults.baseURL}/marks/evidence/excel?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => res.blob())
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error?.message || "Couldn't generate the marksheet.");
+        }
+        return res.blob();
+      })
       .then((blob) => {
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `marks-evidence-${currentAssignment.Class?.name}-${currentAssignment.Module?.moduleTitle}-${currentTerm?.name}.pdf`;
+        link.download = `marksheet-${currentAssignment.Class?.name}-${currentAssignment.Module?.moduleTitle}-${currentTerm?.name}.xlsx`;
         link.click();
-      });
+      })
+      .catch((err) => toast.error(err.message));
   }
 
   // Downloads a spreadsheet pre-filled with the class roster (and any
@@ -784,10 +795,10 @@ export default function MarksEntry() {
               <Button
                 size="sm"
                 variant="teal"
-                onClick={downloadEvidencePdf}
+                onClick={downloadEvidenceExcel}
                 className="w-full lg:w-auto"
               >
-                <Download size={14} />
+                <FileSpreadsheet size={14} />
                 Get Marksheet
               </Button>
               {hasSavedMarks &&

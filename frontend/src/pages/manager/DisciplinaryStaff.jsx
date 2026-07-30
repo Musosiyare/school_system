@@ -162,6 +162,28 @@ export default function DisciplinaryStaff() {
     }
   }
 
+  // Issues a brand new temporary password — for once this person already
+  // changed their password themselves (so there's nothing left to recover
+  // via viewTempPassword) but has now forgotten that one too. Same endpoint
+  // Teachers.jsx uses; the backend already accepts discipline accounts here.
+  async function resetPassword(person) {
+    const ok = await confirm({
+      title: "Reset this account's password?",
+      message: `${person.name} will be signed out and must log in with a new temporary password, then set their own.`,
+      confirmText: "Reset password",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setTempPasswordError("");
+    try {
+      const { data } = await api.post(`/teachers/${person.id}/reset-password`);
+      await load();
+      setCredentialsModal({ email: person.email, temporaryPassword: data.temporaryPassword });
+    } catch (err) {
+      setTempPasswordError(err.message);
+    }
+  }
+
   return (
     <div>
       <Card
@@ -235,9 +257,25 @@ export default function DisciplinaryStaff() {
                       >
                         <UserCog size={14} />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => viewTempPassword(person)} title="View credentials">
-                        <KeyRound size={14} />
-                      </Button>
+                      {person.tempPasswordSetAt ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => viewTempPassword(person)}
+                          title="View temporary password"
+                        >
+                          <KeyRound size={14} />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => resetPassword(person)}
+                          title="Issue a new temporary password"
+                        >
+                          <KeyRound size={14} />
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant={person.status === "active" ? "danger" : "primary"}

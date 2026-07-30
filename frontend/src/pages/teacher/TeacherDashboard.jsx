@@ -231,31 +231,30 @@ export default function TeacherDashboard() {
 
   return (
     <div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 border border-slate-200 rounded-2xl overflow-hidden shadow-sm mb-6">
         {stats.map((s) => (
           <button
             key={s.label}
             type="button"
             onClick={s.onClick}
             disabled={!s.clickable}
-            className={`group text-left bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-200
-              ${s.clickable ? "hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300 cursor-pointer" : "cursor-default opacity-70"}`}
+            className={`group flex items-center gap-3 bg-white px-4 py-4 sm:px-5 text-left transition-colors
+              ${s.clickable ? "hover:bg-slate-50 cursor-pointer" : "cursor-default opacity-70"}`}
           >
-            <div className="flex items-start justify-between mb-3">
-              <div
-                className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${s.accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
-              >
-                <s.icon size={18} />
-              </div>
-              {s.clickable && (
-                <ArrowRight
-                  size={14}
-                  className="mt-1.5 text-slate-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition"
-                />
-              )}
+            <div
+              className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${s.accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+            >
+              <s.icon size={18} />
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-slate-800 truncate" title={typeof s.value === "string" ? s.value : undefined}>{loading ? "…" : s.value}</div>
-            <div className="text-xs sm:text-sm text-slate-500">{s.label}</div>
+            <div className="min-w-0 flex-1">
+              <div
+                className="text-xl font-bold text-slate-800 leading-tight truncate"
+                title={typeof s.value === "string" ? s.value : undefined}
+              >
+                {loading ? "…" : s.value}
+              </div>
+              <div className="text-xs text-slate-500 truncate">{s.label}</div>
+            </div>
           </button>
         ))}
       </div>

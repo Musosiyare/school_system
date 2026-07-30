@@ -62,46 +62,46 @@ function gradeTone(avg) {
 
 const MEDAL_COLORS = ["text-amber-500", "text-slate-400", "text-amber-700"];
 
-function StatCard({ icon: Icon, label, value, tint = "from-brand-400 to-brand-600" }) {
+// A cell for use inside a consolidated stat card — no border/shadow of its
+// own (the parent grid supplies a single shared border plus 1px gridlines
+// via `gap-px bg-slate-200`), so several related numbers can share one card
+// instead of each getting its own box.
+function StatCell({ icon: Icon, label, value, accent = "from-brand-400 to-brand-600" }) {
   return (
-    <div className="group bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex items-center gap-3 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300">
+    <div className="flex items-center gap-3 bg-white px-4 py-4 sm:px-5">
       <div
-        className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${tint} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+        className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${accent} text-white shadow-sm`}
       >
-        <Icon size={19} />
+        <Icon size={18} />
       </div>
       <div className="min-w-0">
         <div className="text-xl font-bold text-slate-800 leading-tight">{value}</div>
-        {/* Wraps instead of truncating — a clipped label ("Active T...")
-            reads as broken/confusing, and these cards have room for two
-            short lines. */}
-        <div className="text-xs text-slate-500 leading-snug">{label}</div>
+        <div className="text-xs text-slate-500 leading-snug truncate">{label}</div>
       </div>
     </div>
   );
 }
 
-// Used for "Best Class" / "Needs Attention" — keeps the caption, the class
-// name, and the percentage on their own lines instead of squeezing them
-// into one truncated label string (which used to clip mid-name, e.g.
-// "Needs Attention — L...").
-function ClassHighlightCard({ icon: Icon, caption, className, value, tint, emptyText = "—" }) {
+// Like HighlightCell but for "Best Class" / "Needs Attention" style entries
+// that show a caption, a class name, and a value — for use inside the same
+// consolidated grid as StatCell.
+function HighlightCell({ icon: Icon, caption, className, value, accent, emptyText = "—" }) {
   return (
-    <div className="group bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex items-center gap-3 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300">
+    <div className="flex items-center gap-3 bg-white px-4 py-4 sm:px-5">
       <div
-        className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${tint} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+        className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${accent} text-white shadow-sm`}
       >
-        <Icon size={19} />
+        <Icon size={18} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-xs text-slate-500">{caption}</div>
+        <div className="text-xs text-slate-500 truncate">{caption}</div>
         {className ? (
           <>
-            <div className="text-sm font-semibold text-slate-800 break-words">{className}</div>
+            <div className="text-sm font-semibold text-slate-800 truncate">{className}</div>
             <div className="text-lg font-bold text-slate-800 leading-tight">{value}</div>
           </>
         ) : (
-          <div className="text-sm font-semibold text-slate-400 break-words">{emptyText}</div>
+          <div className="text-sm font-semibold text-slate-400 truncate">{emptyText}</div>
         )}
       </div>
     </div>
@@ -557,13 +557,26 @@ export default function Statistics() {
       <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
         School at a Glance
       </h3>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <StatCard icon={GraduationCap} label="Students" value={overview.totalStudents} tint="from-brand-400 to-brand-600" />
-        <StatCard icon={Mars} label="Boys" value={overview.boys} tint="from-blue-400 to-blue-600" />
-        <StatCard icon={Venus} label="Girls" value={overview.girls} tint="from-pink-400 to-pink-600" />
-        <StatCard icon={Layers} label="Classes" value={overview.totalClasses} tint="from-teal-400 to-teal-600" />
-        <StatCard icon={Users} label="Active Teachers" value={overview.activeTeachers} tint="from-violet-400 to-violet-600" />
-        <StatCard icon={BookOpen} label="Modules" value={overview.totalModules} tint="from-amber-400 to-amber-600" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 border border-slate-200 rounded-2xl overflow-hidden shadow-sm mb-6">
+        <div className="flex items-center gap-3 bg-white px-4 py-4 sm:px-5">
+          <div className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-sm">
+            <GraduationCap size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xl font-bold text-slate-800 leading-tight">{overview.totalStudents}</div>
+            <div className="text-xs text-slate-500 flex items-center gap-2">
+              <span className="inline-flex items-center gap-0.5 text-blue-600">
+                <Mars size={11} /> {overview.boys}
+              </span>
+              <span className="inline-flex items-center gap-0.5 text-pink-600">
+                <Venus size={11} /> {overview.girls}
+              </span>
+            </div>
+          </div>
+        </div>
+        <StatCell icon={Layers} label="Classes" value={overview.totalClasses} accent="from-teal-400 to-teal-600" />
+        <StatCell icon={Users} label="Active Teachers" value={overview.activeTeachers} accent="from-violet-400 to-violet-600" />
+        <StatCell icon={BookOpen} label="Modules" value={overview.totalModules} accent="from-amber-400 to-amber-600" />
       </div>
 
       {/* Gender breakdown */}
@@ -788,23 +801,23 @@ export default function Statistics() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-              <StatCard icon={TrendingUp} label="School Average" value={`${academic.schoolAverage}%`} tint="from-emerald-400 to-emerald-600" />
-              <StatCard icon={Trophy} label="Pass Rate" value={`${academic.schoolPassRate}%`} tint="from-amber-400 to-amber-600" />
-              <ClassHighlightCard
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 border border-slate-200 rounded-2xl overflow-hidden shadow-sm mb-6">
+              <StatCell icon={TrendingUp} label="School Average" value={`${academic.schoolAverage}%`} accent="from-emerald-400 to-emerald-600" />
+              <StatCell icon={Trophy} label="Pass Rate" value={`${academic.schoolPassRate}%`} accent="from-amber-400 to-amber-600" />
+              <HighlightCell
                 icon={TrendingUp}
                 caption="Best Class"
                 className={academic.bestClass?.className}
                 value={academic.bestClass ? `${academic.bestClass.average}%` : null}
-                tint="from-emerald-400 to-emerald-600"
+                accent="from-emerald-400 to-emerald-600"
                 emptyText="No ranked classes yet"
               />
-              <ClassHighlightCard
+              <HighlightCell
                 icon={TrendingDown}
                 caption="Needs Attention (below 70%)"
                 className={academic.weakestClass?.className}
                 value={academic.weakestClass ? `${academic.weakestClass.average}%` : null}
-                tint="from-red-400 to-red-600"
+                accent="from-red-400 to-red-600"
                 emptyText="No class below 70%"
               />
             </div>

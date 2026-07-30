@@ -239,24 +239,24 @@ export default function ManagerDashboard() {
   return (
     <div>
       <ArchivedYearBanner />
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-200 border border-slate-200 rounded-2xl overflow-hidden shadow-sm mb-6">
         {stats.map((s) => (
           <button
             key={s.key}
             onClick={() => openStat(s.key)}
             disabled={loading}
-            className="group text-left bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300 transition-all duration-200 disabled:cursor-wait"
+            className="group flex items-center gap-3 bg-white px-4 py-4 sm:px-5 text-left hover:bg-slate-50 transition-colors disabled:cursor-wait"
           >
-            <div className="flex items-center justify-between mb-3">
-              <div
-                className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${s.accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
-              >
-                <s.icon size={19} />
-              </div>
-              <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all" />
+            <div
+              className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${s.accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+            >
+              <s.icon size={18} />
             </div>
-            <div className="text-2xl font-bold text-slate-800">{loading ? "…" : s.value}</div>
-            <div className="text-sm text-slate-500">{s.label}</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xl font-bold text-slate-800 leading-tight">{loading ? "…" : s.value}</div>
+              <div className="text-xs text-slate-500 truncate">{s.label}</div>
+            </div>
+            <ChevronRight size={15} className="hidden sm:block shrink-0 text-slate-300 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all" />
           </button>
         ))}
       </div>

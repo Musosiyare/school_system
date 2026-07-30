@@ -76,22 +76,26 @@ const STEPS = [
   },
 ];
 
+// Tones here mirror the role colours used everywhere else in the system:
+// superuser = violet, manager = brand navy, teacher = teal (see Badge.jsx
+// and tailwind.config.js), so the same person recognises the same colour
+// for the same role once they sign in.
 const ROLES = [
   {
     icon: School,
-    tone: "teal",
+    tone: "violet",
     title: "Superuser",
     text: "Onboards new schools. Each one gets its own manager account and its own fully separated data.",
   },
   {
     icon: Users,
-    tone: "ink",
+    tone: "brand",
     title: "Manager",
     text: "Sets up years, classes, modules, teachers and students, then reviews reports and rankings for the whole school.",
   },
   {
     icon: GraduationCap,
-    tone: "orange",
+    tone: "teal",
     title: "Teacher",
     text: "Opens straight to their own assigned modules and classes, records marks, and downloads their own reports.",
   },
@@ -110,8 +114,8 @@ export default function Landing() {
       <header className="sticky top-0 z-40 bg-white/85 backdrop-blur border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
-              <School size={17} className="text-teal-400" />
+            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-brand-600 to-brand-700 flex items-center justify-center shrink-0">
+              <School size={17} className="text-teal-300" />
             </div>
             <span className="font-semibold tracking-tight">Mid-Term Reporting</span>
           </div>
@@ -131,7 +135,7 @@ export default function Landing() {
           <div className="hidden md:flex items-center gap-3">
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-teal-600 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-teal-600 text-white px-4 py-2 text-sm font-medium hover:from-brand-500 hover:to-teal-500 transition-colors"
             >
               Sign in <ArrowRight size={15} />
             </Link>
@@ -160,7 +164,7 @@ export default function Landing() {
             ))}
             <Link
               to="/login"
-              className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 text-white px-4 py-2.5 text-sm font-medium"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-teal-600 text-white px-4 py-2.5 text-sm font-medium"
             >
               Sign in <ArrowRight size={15} />
             </Link>
@@ -169,7 +173,7 @@ export default function Landing() {
       </header>
 
       {/* --------------------------------------------------------------- Hero */}
-      <section className="relative bg-slate-950 text-white overflow-hidden">
+      <section className="relative bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 text-white overflow-hidden">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.06]"
           style={{
@@ -193,7 +197,7 @@ export default function Landing() {
               <span className="text-teal-400">Ranked report cards</span> out.
             </h1>
             <p
-              className="landing-fade-up text-slate-300 text-base sm:text-lg mt-5 max-w-lg leading-relaxed"
+              className="landing-fade-up text-brand-100 text-base sm:text-lg mt-5 max-w-lg leading-relaxed"
               style={{ animationDelay: "160ms" }}
             >
               One place for academic years, classes, modules and marks — and
@@ -206,7 +210,7 @@ export default function Landing() {
             >
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 rounded-lg bg-teal-500 text-slate-950 px-5 py-3 text-sm font-semibold hover:bg-teal-400 transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-400 text-brand-700 px-5 py-3 text-sm font-semibold hover:bg-teal-300 transition-colors"
               >
                 Sign in to your school <ArrowRight size={16} />
               </Link>
@@ -218,10 +222,10 @@ export default function Landing() {
               </a>
             </div>
             <p
-              className="landing-fade-up flex items-center gap-1.5 text-xs text-slate-400 mt-8"
+              className="landing-fade-up flex items-center gap-1.5 text-xs text-brand-200 mt-8"
               style={{ animationDelay: "300ms" }}
             >
-              <ShieldCheck size={13} className="text-slate-500" />
+              <ShieldCheck size={13} className="text-brand-200" />
               Every school's data stays private to that school.
             </p>
           </div>
@@ -236,9 +240,9 @@ export default function Landing() {
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="absolute w-72 h-80 -rotate-[7deg] translate-x-5 translate-y-6 rounded-2xl bg-white/[0.04] ring-1 ring-white/10" />
               <div className="relative w-72 rotate-[3deg] rounded-2xl bg-white text-slate-700 shadow-2xl shadow-black/40 overflow-hidden ring-1 ring-black/5">
-                <div className="bg-slate-900 px-5 py-4 flex items-center gap-2.5">
+                <div className="bg-brand-700 px-5 py-4 flex items-center gap-2.5">
                   <div className="h-8 w-8 rounded-lg bg-teal-400 flex items-center justify-center shrink-0">
-                    <School size={16} className="text-slate-900" />
+                    <School size={16} className="text-brand-700" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[12px] font-semibold text-white leading-tight">
@@ -351,7 +355,7 @@ export default function Landing() {
       </section>
 
       {/* ------------------------------------------------------------ Features */}
-      <section id="features" className="bg-slate-950 text-white">
+      <section id="features" className="bg-brand-700 text-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
           <div className="max-w-xl">
             <span className="text-xs font-semibold tracking-wide uppercase text-teal-300">
@@ -405,9 +409,9 @@ export default function Landing() {
                   ${
                     r.tone === "teal"
                       ? "bg-teal-50 ring-teal-100 text-teal-600"
-                      : r.tone === "orange"
-                      ? "bg-orange-50 ring-orange-100 text-orange-600"
-                      : "bg-slate-900 ring-slate-900 text-white"
+                      : r.tone === "violet"
+                      ? "bg-violet-50 ring-violet-100 text-violet-600"
+                      : "bg-brand-700 ring-brand-700 text-white"
                   }`}
               >
                 <r.icon size={20} />
@@ -432,7 +436,7 @@ export default function Landing() {
           </div>
           <Link
             to="/login"
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-950 text-white px-6 py-3 text-sm font-semibold hover:bg-slate-800 transition-colors shrink-0"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-700 text-white px-6 py-3 text-sm font-semibold hover:bg-brand-600 transition-colors shrink-0"
           >
             Sign in <ArrowRight size={16} />
           </Link>
@@ -443,8 +447,8 @@ export default function Landing() {
       <footer className="bg-white border-t border-slate-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-md bg-slate-900 flex items-center justify-center">
-              <School size={13} className="text-teal-400" />
+            <div className="h-7 w-7 rounded-md bg-gradient-to-br from-brand-600 to-brand-700 flex items-center justify-center">
+              <School size={13} className="text-teal-300" />
             </div>
             <span className="text-sm font-medium text-slate-600">Mid-Term Reporting System</span>
           </div>

@@ -2,7 +2,7 @@ const router = require("express").Router();
 const {
   submitMarks,
   getMarks,
-  getMarksEvidencePdf,
+  getMarksEvidenceExcel,
   downloadMarksTemplate,
   importMarksTemplate,
 } = require("../controllers/markController");
@@ -13,7 +13,7 @@ router.use(authenticate, scopeToSchool);
 
 router.post("/", authorize("teacher", "manager"), submitMarks);
 router.get("/", authorize("teacher", "manager"), getMarks);
-router.get("/evidence/pdf", authorize("teacher", "manager"), getMarksEvidencePdf);
+router.get("/evidence/excel", authorize("teacher", "manager"), getMarksEvidenceExcel);
 router.get("/template", authorize("teacher", "manager"), downloadMarksTemplate);
 router.post("/import", authorize("teacher", "manager"), upload.single("file"), importMarksTemplate);
 
