@@ -21,11 +21,16 @@ async function resolveViewingYear(req) {
     const year = await AcademicYear.findOne({
       where: { id: req.query.academicYearId, schoolId: req.schoolId },
       include: [Term],
+      order: [[Term, "name", "ASC"]],
     });
     if (!year) throw ApiError.badRequest("Invalid academicYearId for this school");
     return year;
   }
-  return AcademicYear.findOne({ where: { schoolId: req.schoolId, isCurrent: true }, include: [Term] });
+  return AcademicYear.findOne({
+    where: { schoolId: req.schoolId, isCurrent: true },
+    include: [Term],
+    order: [[Term, "name", "ASC"]],
+  });
 }
 
 // Builds { classId: [students...] } for a set of classes using

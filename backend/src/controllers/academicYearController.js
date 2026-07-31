@@ -147,7 +147,16 @@ const listAcademicYears = asyncHandler(async (req, res) => {
   const years = await AcademicYear.findAll({
     where,
     include: [Term],
-    order: [["id", "DESC"]],
+    // Term names are exactly "Term 1"/"Term 2"/"Term 3", so a plain
+    // alphabetical sort already puts them in the right order — without
+    // this, the DB is free to return the joined Term rows in any order,
+    // which is what was causing terms to show up as e.g. "Term 3, Term 1,
+    // Term 2" (and the "first" term used as the default selection to be
+    // whichever one happened to come back first).
+    order: [
+      ["id", "DESC"],
+      [Term, "name", "ASC"],
+    ],
   });
   res.json({ academicYears: years });
 });

@@ -357,21 +357,45 @@ export default function Layout({ children }) {
       );
     }
 
-    // Group — expand/collapse is click-only (no hover), with a gradient
-    // icon badge and a soft tinted panel for its items.
+    // Group — icon badge + soft tinted panel for its items. In the full
+    // sidebar this expands/collapses on click. In the collapsed
+    // (icon-only) sidebar there's no label to click anyway, so instead the
+    // group's item icons are shown stacked right under the group badge,
+    // always visible — no click needed to see what's inside.
     const Icon = entry.icon;
     const groupActive = entry.items.some((i) => i.to === location.pathname);
     const expanded = openGroupId === entry.id;
+
+    if (isCollapsed) {
+      return (
+        <div key={entry.id} className="space-y-0.5 pt-1.5 border-t border-slate-100 first:pt-0 first:border-t-0">
+          {entry.items.map((item) => {
+            const ItemIcon = item.icon;
+            const active = location.pathname === item.to;
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                title={item.label}
+                onClick={() => setMobileNavOpen(false)}
+                className={`flex items-center justify-center h-8 w-full rounded-lg transition-colors
+                  ${active ? `bg-gradient-to-br ${entry.accent} text-white` : "text-slate-500 hover:bg-slate-100"}`}
+              >
+                <ItemIcon size={15} />
+              </Link>
+            );
+          })}
+        </div>
+      );
+    }
 
     return (
       <div key={entry.id} className="relative">
         <button
           type="button"
-          title={isCollapsed ? entry.label : undefined}
           onClick={() => setOpenGroupId((prev) => (prev === entry.id ? null : entry.id))}
           aria-expanded={expanded}
-          className={`w-full flex items-center gap-2.5 rounded-lg py-1.5 text-sm font-medium transition-colors
-            ${isCollapsed ? "justify-center px-1.5" : "pl-1.5 pr-2.5"}
+          className={`w-full flex items-center gap-2.5 rounded-lg py-1.5 pl-1.5 pr-2.5 text-sm font-medium transition-colors
             ${expanded || groupActive ? `${entry.tint} border` : "border border-transparent text-slate-600 hover:bg-slate-100"}`}
         >
           <span
@@ -379,21 +403,17 @@ export default function Layout({ children }) {
           >
             <Icon size={15} />
           </span>
-          {!isCollapsed && (
-            <>
-              <span className={`flex-1 text-left truncate ${expanded || groupActive ? "text-slate-800" : ""}`}>
-                {entry.label}
-              </span>
-              <ChevronDown
-                size={15}
-                className={`shrink-0 transition-transform text-slate-400 ${expanded ? "rotate-180" : ""}`}
-              />
-            </>
-          )}
+          <span className={`flex-1 text-left truncate ${expanded || groupActive ? "text-slate-800" : ""}`}>
+            {entry.label}
+          </span>
+          <ChevronDown
+            size={15}
+            className={`shrink-0 transition-transform text-slate-400 ${expanded ? "rotate-180" : ""}`}
+          />
         </button>
 
-        {/* Expanded sidebar: items appear inline, in a soft tinted card under the group */}
-        {!isCollapsed && expanded && (
+        {/* Items appear inline, in a soft tinted card under the group */}
+        {expanded && (
           <div className={`mt-1 rounded-xl border ${entry.tint} p-1.5 space-y-0.5`}>
             {entry.items.map((item) => {
               const ItemIcon = item.icon;
@@ -412,35 +432,6 @@ export default function Layout({ children }) {
                   >
                     <ItemIcon size={13} />
                   </span>
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Collapsed sidebar: no room to expand inline, so a click reveals a
-            flyout panel to the right instead. */}
-        {isCollapsed && expanded && (
-          <div className="absolute left-full top-0 ml-1.5 w-56 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden py-1.5 z-50">
-            <p className={`mx-1.5 mb-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-white bg-gradient-to-br ${entry.accent}`}>
-              {entry.label}
-            </p>
-            {entry.items.map((item) => {
-              const ItemIcon = item.icon;
-              const active = location.pathname === item.to;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => {
-                    setMobileNavOpen(false);
-                    setOpenGroupId(null);
-                  }}
-                  className={`mx-1.5 flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors
-                    ${active ? `${entry.tint} border text-slate-800` : "text-slate-600 hover:bg-slate-50"}`}
-                >
-                  <ItemIcon size={15} className="shrink-0 text-slate-400" />
                   <span className="truncate">{item.label}</span>
                 </Link>
               );

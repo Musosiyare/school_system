@@ -416,18 +416,16 @@ export default function Reports() {
           <p className="text-sm text-slate-400 py-6 text-center">Loading report…</p>
         )}
         {studentReport && (
-          <div className="overflow-x-auto">
-            <ReportCardTable
-              report={studentReport}
-              schoolName={studentReport.schoolName}
-              schoolAddress={studentReport.schoolAddress}
-              schoolEmail={studentReport.schoolEmail}
-              schoolPhone={studentReport.schoolPhone}
-              className={classReport?.className}
-              classCategory={studentReport.classCategory ?? classReport?.classCategory}
-              termName={selectedTerm?.name}
-            />
-          </div>
+          <ReportCardTable
+            report={studentReport}
+            schoolName={studentReport.schoolName}
+            schoolAddress={studentReport.schoolAddress}
+            schoolEmail={studentReport.schoolEmail}
+            schoolPhone={studentReport.schoolPhone}
+            className={classReport?.className}
+            classCategory={studentReport.classCategory ?? classReport?.classCategory}
+            termName={selectedTerm?.name}
+          />
         )}
       </Modal>
 

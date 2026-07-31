@@ -10,6 +10,20 @@ export default function Modal({ open, onClose, title, children, footer, size = "
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open) return;
+    const html = document.documentElement;
+    const { body } = document;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   const widths = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-3xl", full: "max-w-5xl" };
@@ -35,7 +49,7 @@ export default function Modal({ open, onClose, title, children, footer, size = "
             <X size={18} />
           </button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto">{children}</div>
+        <div className="px-5 py-4 overflow-auto">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4 shrink-0">{footer}</div>}
       </div>
     </div>
