@@ -10,11 +10,15 @@ import { useEffect, useMemo, useState } from "react";
  * search term narrows the list) so you're never stranded on a page that no
  * longer exists.
  */
-export function usePagination(items, pageSize = 10) {
+export function usePagination(items, initialPageSize = 10) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(initialPageSize);
 
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
 
+  // Reset to page 1 whenever the item count changes (e.g. a new search term
+  // or filter narrows the list) OR the page size itself changes, so you're
+  // never stranded on a page that no longer exists.
   useEffect(() => {
     setPage(1);
   }, [items.length, pageSize]);
@@ -32,6 +36,7 @@ export function usePagination(items, pageSize = 10) {
     totalPages,
     pageItems,
     pageSize,
+    setPageSize,
     total: items.length,
   };
 }

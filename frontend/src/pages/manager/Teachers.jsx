@@ -19,6 +19,7 @@ import {
   Users,
   Ban,
   CheckCircle2,
+  Check,
   Eye,
   BookOpen,
   Layers,
@@ -33,6 +34,12 @@ import {
 } from "lucide-react";
 
 const emptyForm = { name: "", email: "", phone: "" };
+
+// Shown in place of a missing contact field (null or ""), so it reads as
+// clearly missing rather than blending in with real data.
+function NA() {
+  return <span className="italic text-amber-500">N/A</span>;
+}
 
 export default function Teachers() {
   const confirm = useConfirm();
@@ -53,6 +60,7 @@ export default function Teachers() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState(""); // "" = all, "active", "inactive"
 
   // Arriving from the header search (?highlight=<teacherId>): glow + scroll
   // to the matching row once teachers have loaded. The param is cleared from
@@ -244,6 +252,8 @@ export default function Teachers() {
   }
 
   const filteredTeachers = teachers.filter((t) => {
+    if (statusFilter === "active" && t.status !== "active") return false;
+    if (statusFilter === "inactive" && t.status === "active") return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return [t.name, t.email].filter(Boolean).some((field) => field.toLowerCase().includes(q));
@@ -255,8 +265,8 @@ export default function Teachers() {
     teaching: (t) => assignmentsFor(t.id).length,
   });
 
-  const { pageItems: pagedTeachers, page, setPage, totalPages, total, pageSize } =
-    usePagination(sortedTeachers, 8);
+  const { pageItems: pagedTeachers, page, setPage, totalPages, total, pageSize, setPageSize } =
+    usePagination(sortedTeachers, 10);
 
   useEffect(() => {
     if (!highlightId || sortedTeachers.length === 0) return;
@@ -289,12 +299,37 @@ export default function Teachers() {
         title="All Teachers"
         subtitle="Modules & classes shown below are managed from the Assignments page."
         actions={
-          <SearchInput
-            value={query}
-            onChange={setQuery}
-            placeholder="Search by name or email..."
-            className="w-full sm:w-64"
-          />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+            <div className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              {[
+                { value: "", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Deactivated" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setStatusFilter(opt.value)}
+                  className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+                    statusFilter === opt.value
+                      ? "bg-white text-brand-600 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {statusFilter === opt.value && (
+                    <Check size={12} strokeWidth={3} className="shrink-0 text-brand-500" />
+                  )}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search by name or email..."
+              className="w-full sm:w-64"
+            />
+          </div>
         }
       >
         <ErrorText>{tempPasswordError}</ErrorText>
@@ -319,7 +354,9 @@ export default function Teachers() {
               </EmptyRow>
             )}
             {teachers.length > 0 && filteredTeachers.length === 0 && (
-              <EmptyRow colSpan={5}>No teachers match "{query}".</EmptyRow>
+              <EmptyRow colSpan={5}>
+                {query ? `No teachers match "${query}".` : "No teachers match the selected filter."}
+              </EmptyRow>
             )}
             {pagedTeachers.map((t) => {
               const teacherAssignments = assignmentsFor(t.id);
@@ -330,10 +367,27 @@ export default function Teachers() {
                   className={t.id === highlightId ? "bg-amber-50 ring-1 ring-inset ring-amber-300 transition-colors duration-1000" : undefined}
                 >
                   <Td className="align-top">
-                    <p className="font-medium text-slate-800">{t.name}</p>
-                    <p className="text-xs text-slate-400 truncate max-w-[180px]" title={t.email}>
-                      {t.email}
+                    <p className="flex items-center gap-1.5 font-medium text-slate-800">
+                      <User size={13} className="text-slate-400 shrink-0" />
+                      {t.name}
                     </p>
+                    <p
+                      className="mt-0.5 flex items-start gap-1.5 text-xs text-slate-400"
+                      title={t.email}
+                    >
+                      <Mail size={12} className="text-blue-500 shrink-0 mt-0.5" />
+                      <span className="break-all">{t.email || <NA />}</span>
+                    </p>
+                    {t.phone ? (
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+                        <Phone size={12} className="text-emerald-500 shrink-0" />
+                        {t.phone}
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-xs">
+                        <NA />
+                      </p>
+                    )}
                     {t.disciplineRole && (
                       <Badge tone="manager" className="mt-1">
                         SBMS: {t.disciplineRole === "dean_of_discipline" ? "Dean of Discipline" : "Disciplinary Officer"}
@@ -430,7 +484,14 @@ export default function Teachers() {
             })}
           </tbody>
         </Table>
-        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={total} pageSize={pageSize} />
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          total={total}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+        />
       </Card>
 
       <Modal

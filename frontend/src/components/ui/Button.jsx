@@ -6,6 +6,11 @@ const VARIANTS = {
   teal: "bg-teal-500 text-white hover:bg-teal-600",
   violet: "bg-violet-600 text-white hover:bg-violet-700",
   amber: "bg-amber-500 text-white hover:bg-amber-600",
+  // For use on top of dark/navy surfaces (e.g. the brand-colored class
+  // picker card), where the default `primary`/`secondary` variants would
+  // blend into the background instead of standing out from it.
+  light: "bg-white text-brand-600 hover:bg-slate-100 shadow-sm",
+  outlineLight: "bg-white/10 text-white border border-white/30 hover:bg-white/20 backdrop-blur-sm",
 };
 
 const SIZES = {

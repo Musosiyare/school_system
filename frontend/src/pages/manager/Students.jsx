@@ -33,13 +33,22 @@ import {
   Info,
   ArrowRight,
   Ban,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 
 const emptyForm = { firstName: "", lastName: "", dob: "", sex: "", guardianName: "", guardianPhone: "" };
 
 function formatDob(dob) {
-  if (!dob) return "N/A";
+  if (!dob) return null;
   return new Date(dob).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+// Shown in place of DOB/guardian/etc. when the field is empty in the
+// database (null or ""), so a missing value reads as clearly missing
+// rather than blending in with real data.
+function NA() {
+  return <span className="italic text-amber-500">N/A</span>;
 }
 
 function sexLabel(sex) {
@@ -62,6 +71,7 @@ export default function Students() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
+  const [sexFilter, setSexFilter] = useState(""); // "" = all, "M" = boys, "F" = girls
 
   // Arriving from the header search (?classId=&highlight=): preselect the
   // class once classes have loaded, then glow + scroll to the row once
@@ -315,6 +325,7 @@ export default function Students() {
   }
 
   const filteredStudents = students.filter((s) => {
+    if (sexFilter && s.sex !== sexFilter) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return [s.admissionNumber, s.firstName, s.lastName, s.guardianName, s.guardianPhone]
@@ -330,8 +341,8 @@ export default function Students() {
     guardian: (s) => s.guardianName?.toLowerCase(),
   });
 
-  const { pageItems: pagedStudents, page, setPage, totalPages, total, pageSize } =
-    usePagination(sortedStudents, 8);
+  const { pageItems: pagedStudents, page, setPage, totalPages, total, pageSize, setPageSize } =
+    usePagination(sortedStudents, 10);
 
   useEffect(() => {
     if (!highlightId || sortedStudents.length === 0) return;
@@ -392,37 +403,81 @@ export default function Students() {
   return (
     <div>
       <ArchivedYearBanner />
-      <div className="flex justify-end gap-2 mb-6">
-        {isCurrentView && (
-          <>
-            <Button variant="secondary" onClick={openPull} disabled={!selectedClassId}>
-              <CopyPlus size={16} /> Pull Students
-            </Button>
-            <Button onClick={openCreate} disabled={!selectedClassId}>
-              <Plus size={16} /> Enroll Student
-            </Button>
-          </>
-        )}
-      </div>
 
-      <Card>
-        <Field label="Class" className="max-w-xs">
-          <Select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
-            <option value="">Select a class</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </Card>
+      {/* Class picker + primary actions, grouped together on a navy card so
+          the "which class" decision and what you can do with it read as one
+          unit instead of two disconnected controls. */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-600 p-5 sm:p-6 mb-6 shadow-lg shadow-brand-500/10">
+        <div className="pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -bottom-14 -left-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <label className="flex flex-1 max-w-xs flex-col gap-1.5 text-sm">
+            <span className="flex items-center gap-1.5 font-medium text-white/80">
+              <Layers size={14} /> Class
+            </span>
+            <div className="relative">
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="form-field w-full appearance-none rounded-xl border border-white/20 bg-white/10 px-3.5 py-2.5 pr-9 text-sm font-medium text-white outline-none backdrop-blur-sm transition placeholder:text-white/50 focus:border-white/40 focus:bg-white/15"
+              >
+                <option value="" className="text-slate-800">
+                  Select a class
+                </option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id} className="text-slate-800">
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/60"
+              />
+            </div>
+          </label>
+
+          {isCurrentView && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outlineLight" onClick={openPull} disabled={!selectedClassId}>
+                <CopyPlus size={16} /> Pull Students
+              </Button>
+              <Button variant="light" onClick={openCreate} disabled={!selectedClassId}>
+                <Plus size={16} /> Enroll Student
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {selectedClassId && (
         <Card
           title={`Students in ${selectedClass?.name || ""}`}
           actions={
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                {[
+                  { value: "", label: "All" },
+                  { value: "M", label: "Boys" },
+                  { value: "F", label: "Girls" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setSexFilter(opt.value)}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+                      sexFilter === opt.value
+                        ? "bg-white text-brand-600 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {sexFilter === opt.value && (
+                      <Check size={12} strokeWidth={3} className="shrink-0 text-brand-500" />
+                    )}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <SearchInput
                 value={query}
                 onChange={setQuery}
@@ -469,7 +524,11 @@ export default function Students() {
                 </EmptyRow>
               )}
               {students.length > 0 && filteredStudents.length === 0 && (
-                <EmptyRow colSpan={6}>No students match "{query}".</EmptyRow>
+                <EmptyRow colSpan={6}>
+                  {query
+                    ? `No students match "${query}".`
+                    : "No students match the selected filter."}
+                </EmptyRow>
               )}
               {pagedStudents.map((s) => (
                 <tr
@@ -498,18 +557,37 @@ export default function Students() {
                       )}
                     </div>
                   </Td>
-                  <Td>{formatDob(s.dob)}</Td>
+                  <Td>
+                    {formatDob(s.dob) ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Cake size={13} className="text-violet-400" />
+                        {formatDob(s.dob)}
+                      </span>
+                    ) : (
+                      <NA />
+                    )}
+                  </Td>
                   <Td>{sexLabel(s.sex)}</Td>
                   <Td>
                     {s.guardianName ? (
                       <div>
-                        <div>{s.guardianName}</div>
-                        {s.guardianPhone && (
-                          <div className="text-xs text-slate-400">{s.guardianPhone}</div>
+                        <div className="flex items-center gap-1.5">
+                          <UserCircle2 size={13} className="text-slate-400 shrink-0" />
+                          {s.guardianName}
+                        </div>
+                        {s.guardianPhone ? (
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+                            <Phone size={12} className="text-emerald-500 shrink-0" />
+                            {s.guardianPhone}
+                          </div>
+                        ) : (
+                          <div className="mt-0.5 text-xs">
+                            <NA />
+                          </div>
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-400">-</span>
+                      <NA />
                     )}
                   </Td>
                   <Td>
@@ -542,7 +620,27 @@ export default function Students() {
               ))}
             </tbody>
           </Table>
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={total} pageSize={pageSize} />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            total={total}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+          />
+        </Card>
+      )}
+
+      {!selectedClassId && (
+        <Card>
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-400">
+              <GraduationCap size={24} />
+            </div>
+            <p className="text-sm text-slate-500 max-w-sm">
+              Students of the selected class will be displayed here. Select a class above to see its students.
+            </p>
+          </div>
         </Card>
       )}
 
