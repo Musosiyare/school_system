@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useYear } from "../context/YearContext";
 import ArchivedYearBanner from "../components/ArchivedYearBanner";
-import ReportCardTable, { classLabel, toDecision } from "../components/ReportCardTable";
+import ReportCardTable, { classLabel, letterGrade } from "../components/ReportCardTable";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
 import Modal from "../components/ui/Modal";
+import Loader from "../components/ui/Loader";
+import SearchInput from "../components/ui/SearchInput";
+import RankBadge from "../components/ui/RankBadge";
+import ScoreCell from "../components/ui/ScoreCell";
+import { avatarColorFor, initialsFor } from "../utils/avatarColor";
+import { averageBand } from "../utils/gradeBands";
 import { Field, Select } from "../components/ui/FormField";
-import { EmptyRow } from "../components/ui/Table";
-import { Eye, Lock, Unlock, MapPin, Printer, Files, AlertTriangle, Phone, Mail } from "lucide-react";
+import { Eye, Lock, Unlock, MapPin, Printer, Files, AlertTriangle, Phone, Mail, Users, SearchX } from "lucide-react";
 
 
 // A clear, intentional block for "can't show this report" states — used
@@ -46,6 +52,7 @@ export default function Reports() {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedTermId, setSelectedTermId] = useState("");
   const [classReport, setClassReport] = useState(null);
+  const [loadingClassReport, setLoadingClassReport] = useState(false);
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [viewingStudent, setViewingStudent] = useState(null); // { id, name } or null
@@ -54,6 +61,7 @@ export default function Reports() {
   const [studentReportErrorCode, setStudentReportErrorCode] = useState("");
   const [printJob, setPrintJob] = useState(null); // { reports: [...] } or null
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [studentSearch, setStudentSearch] = useState("");
 
   useEffect(() => {
     // Managers browse whichever year is selected in the header switcher;
@@ -88,10 +96,12 @@ export default function Reports() {
     setError("");
     setErrorCode("");
     setSelectedIds(new Set());
+    setStudentSearch("");
     if (!selectedClassId || !selectedTermId) {
       setClassReport(null);
       return;
     }
+    setLoadingClassReport(true);
     try {
       const { data } = await api.get(`/classes/${selectedClassId}/term/${selectedTermId}/report`);
       setClassReport(data);
@@ -99,6 +109,8 @@ export default function Reports() {
       setClassReport(null);
       setError(err.message);
       setErrorCode(err.code || "");
+    } finally {
+      setLoadingClassReport(false);
     }
   }
 
@@ -151,9 +163,21 @@ export default function Reports() {
 
   function toggleSelectAll() {
     if (!classReport) return;
-    setSelectedIds((prev) =>
-      prev.size === sortedReports.length ? new Set() : new Set(sortedReports.map((r) => r.student.id))
-    );
+    setSelectedIds((prev) => {
+      // Selects/deselects only the currently visible (search-filtered)
+      // rows, so a selection made before searching isn't silently wiped —
+      // e.g. select all, search a name, select-all again only touches the
+      // narrowed-down list.
+      const visibleIds = filteredReports.map((r) => r.student.id);
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
   }
 
   const sortedReports = classReport
@@ -164,8 +188,18 @@ export default function Reports() {
       })
     : [];
 
+  // Live search: filters the already-loaded class report client-side (no
+  // extra request), by student name — matches as you type.
+  const filteredReports = studentSearch.trim()
+    ? sortedReports.filter((r) => r.student.name.toLowerCase().includes(studentSearch.trim().toLowerCase()))
+    : sortedReports;
+
+  // Selection is tracked against the full class list, not just the
+  // filtered/visible one, so a student stays selected for printing even
+  // after the search box is cleared or changed.
   const selectedReports = sortedReports.filter((r) => selectedIds.has(r.student.id));
-  const allSelected = sortedReports.length > 0 && selectedIds.size === sortedReports.length;
+  const allSelected =
+    filteredReports.length > 0 && filteredReports.every((r) => selectedIds.has(r.student.id));
 
   function printSelected() {
     if (selectedReports.length === 0 || !classReport) return;
@@ -175,6 +209,7 @@ export default function Reports() {
       schoolAddress: classReport.schoolAddress,
       schoolEmail: classReport.schoolEmail,
       schoolPhone: classReport.schoolPhone,
+      schoolLogoUrl: classReport.schoolLogoUrl,
       schoolManagerName: classReport.schoolManagerName,
     }));
     setPrintJob({ reports: withSchoolInfo });
@@ -277,6 +312,14 @@ export default function Reports() {
         </Card>
       )}
 
+      {/* First load for this class/term (no report on screen yet) — show a
+          full, centered loader instead of an empty gap. */}
+      {loadingClassReport && !classReport && !error && (
+        <Card>
+          <Loader label="Loading class report…" />
+        </Card>
+      )}
+
       {classReport && (
         <Card
           title={`${classLabel(classReport.className, classReport.classCategory)} — ${selectedTerm?.name}${
@@ -323,68 +366,127 @@ export default function Reports() {
           }
         >
           {sortedReports.length > 0 && (
-            <p className="text-xs text-slate-400 mb-2">
-              Select students below to print their report card — select one for{" "}
-              <span className="font-medium">Print</span>, or several for{" "}
-              <span className="font-medium">Print All</span>.
-            </p>
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+              <p className="text-xs text-slate-400">
+                Select students below to print their report card — select one for{" "}
+                <span className="font-medium">Print</span>, or several for{" "}
+                <span className="font-medium">Print All</span>.
+              </p>
+              <SearchInput
+                value={studentSearch}
+                onChange={setStudentSearch}
+                placeholder="Search student…"
+                className="w-full sm:w-64"
+              />
+            </div>
           )}
-          <div className="overflow-x-auto">
-            <table className="report-table">
-              <thead>
+          <div className="overflow-x-auto relative rounded-xl border border-slate-200 shadow-sm">
+            {/* Switching class/term while a report is already on screen —
+                dim + blur the existing table and spin a compact loader on
+                top of it, instead of yanking the data away and flashing an
+                empty state. */}
+            {loadingClassReport && (
+              <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center z-10">
+                <Loader label="Updating report…" size="sm" className="py-0" />
+              </div>
+            )}
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide border-b border-slate-200">
                 <tr>
-                  <th style={{ width: 32 }}>
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleSelectAll}
-                      aria-label="Select all students"
-                    />
+                  <th className="px-4 py-3 text-left font-semibold w-10">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none normal-case tracking-normal text-sm text-slate-600 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all students"
+                        className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-500 accent-brand-500 cursor-pointer text-sm leading-none"
+                      />
+                      Select All
+                    </label>
                   </th>
-                  <th>Rank</th>
-                  <th>Student</th>
-                  <th>Weighted Average</th>
-                  <th>Decision</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
+                  <th className="px-4 py-3 text-left font-semibold">Rank</th>
+                  <th className="px-4 py-3 text-left font-semibold">Student</th>
+                  <th className="px-4 py-3 text-left font-semibold">Weighted Average</th>
+                  <th className="px-4 py-3 text-left font-semibold">Grade</th>
+                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedReports.length === 0 && <EmptyRow colSpan={6}>No students in this class.</EmptyRow>}
-                {sortedReports.map((r) => (
-                  <tr key={r.student.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(r.student.id)}
-                        onChange={() => toggleSelect(r.student.id)}
-                        aria-label={`Select ${r.student.name}`}
-                      />
-                    </td>
-                    <td className="tabular-nums">
-                      {r.classRank != null && r.classRankTotal ? `${r.classRank} / ${r.classRankTotal}` : "-"}
-                    </td>
-                    <td>{r.student.name}</td>
-                    <td className="tabular-nums">{r.weightedAverage !== null ? `${r.weightedAverage}%` : "N/A"}</td>
-                    <td>
-                      <span
-                        className={`font-medium ${
-                          r.overallResult === "PASS"
-                            ? "text-emerald-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {toDecision(r.overallResult)}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex justify-end gap-1 flex-wrap">
-                        <Button size="sm" variant="ghost" onClick={() => openStudentReport(r.student)}>
-                          <Eye size={14} /> View
-                        </Button>
+                {sortedReports.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                      <div className="flex flex-col items-center gap-2">
+                        <Users size={22} className="text-slate-300" />
+                        <span className="text-sm">No students in this class.</span>
                       </div>
                     </td>
                   </tr>
-                ))}
+                )}
+                {sortedReports.length > 0 && filteredReports.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                      <div className="flex flex-col items-center gap-2">
+                        <SearchX size={22} className="text-slate-300" />
+                        <span className="text-sm">
+                          No students match <span className="font-medium text-slate-500">"{studentSearch}"</span>.
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {filteredReports.map((r) => {
+                  const checked = selectedIds.has(r.student.id);
+                  const avatar = avatarColorFor(r.student.name);
+                  return (
+                    <tr
+                      key={r.student.id}
+                      className={`border-t border-slate-100 transition-colors duration-150 ${
+                        checked ? "bg-brand-50/60 hover:bg-brand-50" : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="px-4 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSelect(r.student.id)}
+                          aria-label={`Select ${r.student.name}`}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-500 accent-brand-500 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <RankBadge rank={r.classRank} total={r.classRankTotal} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatar.bg} ${avatar.text}`}
+                          >
+                            {initialsFor(r.student.name)}
+                          </span>
+                          <span className="font-medium text-slate-800">{r.student.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <ScoreCell value={r.weightedAverage} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`text-sm font-semibold tabular-nums ${averageBand(r.weightedAverage).text}`}
+                        >
+                          {letterGrade(r.weightedAverage)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex justify-end gap-1 flex-wrap">
+                          <Button size="sm" variant="ghost" onClick={() => openStudentReport(r.student)}>
+                            <Eye size={14} /> View
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -412,9 +514,7 @@ export default function Reports() {
         {studentReportError && (
           <ReportBlockedNotice message={studentReportError} code={studentReportErrorCode} compact />
         )}
-        {!studentReport && !studentReportError && (
-          <p className="text-sm text-slate-400 py-6 text-center">Loading report…</p>
-        )}
+        {!studentReport && !studentReportError && <Loader label="Loading report…" />}
         {studentReport && (
           <ReportCardTable
             report={studentReport}
@@ -422,6 +522,7 @@ export default function Reports() {
             schoolAddress={studentReport.schoolAddress}
             schoolEmail={studentReport.schoolEmail}
             schoolPhone={studentReport.schoolPhone}
+            schoolLogoUrl={studentReport.schoolLogoUrl}
             className={classReport?.className}
             classCategory={studentReport.classCategory ?? classReport?.classCategory}
             termName={selectedTerm?.name}
@@ -429,23 +530,40 @@ export default function Reports() {
         )}
       </Modal>
 
-      {/* Hidden except when printing — see index.css (#print-root). */}
-      <div id="print-root">
-        {printJob?.reports.map((r) => (
-          <div className="report-page" key={r.student.id}>
-            <ReportCardTable
-              report={r}
-              schoolName={r.schoolName || classReport?.schoolName}
-              schoolAddress={r.schoolAddress || classReport?.schoolAddress}
-              schoolEmail={r.schoolEmail || classReport?.schoolEmail}
-              schoolPhone={r.schoolPhone || classReport?.schoolPhone}
-              className={classReport?.className}
-              classCategory={r.student?.classCategory ?? classReport?.classCategory}
-              termName={selectedTerm?.name}
-            />
-          </div>
-        ))}
-      </div>
+      {/* Hidden except when printing — see index.css (#print-root).
+          Portaled to document.body (a sibling of #root) instead of being
+          rendered in place here, deep inside the normal page layout. Why:
+          the print CSS hides everything with visibility:hidden, but
+          visibility:hidden keeps an element's box HEIGHT in the page flow
+          — it just makes it invisible. So the hidden dashboard underneath
+          (sidebar, filters, the full class table, etc.) was still
+          contributing its full height to the printed document, and the
+          browser paginated that hidden height into extra blank pages
+          after the one real report-card page. Portaling #print-root out to
+          <body> lets the print stylesheet collapse #root entirely with
+          display:none (which removes it from layout, not just hides it)
+          while #print-root — now #root's sibling, unaffected by that rule
+          — prints cleanly with no leftover blank pages. */}
+      {createPortal(
+        <div id="print-root">
+          {printJob?.reports.map((r) => (
+            <div className="report-page" key={r.student.id}>
+              <ReportCardTable
+                report={r}
+                schoolName={r.schoolName || classReport?.schoolName}
+                schoolAddress={r.schoolAddress || classReport?.schoolAddress}
+                schoolEmail={r.schoolEmail || classReport?.schoolEmail}
+                schoolPhone={r.schoolPhone || classReport?.schoolPhone}
+                schoolLogoUrl={r.schoolLogoUrl || classReport?.schoolLogoUrl}
+                className={classReport?.className}
+                classCategory={r.student?.classCategory ?? classReport?.classCategory}
+                termName={selectedTerm?.name}
+              />
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

@@ -123,6 +123,7 @@ const NAV = {
       tint: "bg-blue-50/60 border-blue-100",
       items: [
         { to: "/teacher/reports", label: "Reports", icon: FileText },
+        { to: "/teacher/statistics", label: "Statistics", icon: BarChart3 },
         { to: "/teacher/past-years", label: "Past Years", icon: CalendarClock },
       ],
     },
@@ -204,6 +205,7 @@ const PAGE_META = {
     icon: SlidersHorizontal,
   },
   "/teacher/reports": { title: "Reports", subtitle: "Class rankings and report cards.", icon: FileText },
+  "/teacher/statistics": { title: "Statistics", subtitle: "Performance for the class you teach.", icon: BarChart3 },
   "/teacher/past-years": {
     title: "Past Years",
     subtitle: "Browse an old academic year — read-only.",
@@ -231,7 +233,7 @@ function findGroupIdForPath(user, pathname) {
 // finished recording marks. A subject teacher who isn't a class teacher for
 // anything currently sees these as blank/empty pages, so they're hidden from
 // the nav entirely for that teacher.
-const CLASS_TEACHER_ONLY_LINKS = new Set(["/teacher/reports", "/teacher/marks-status"]);
+const CLASS_TEACHER_ONLY_LINKS = new Set(["/teacher/reports", "/teacher/marks-status", "/teacher/statistics"]);
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();

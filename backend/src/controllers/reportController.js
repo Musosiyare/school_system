@@ -74,7 +74,7 @@ const getStudentReport = asyncHandler(async (req, res) => {
   await assertClassAccess(effectiveClassId, req);
   await assertReportsEnabled(req.params.termId, req);
 
-  const school = await School.findByPk(req.schoolId, { attributes: ["name", "address", "email", "phone"] });
+  const school = await School.findByPk(req.schoolId, { attributes: ["name", "address", "email", "phone", "logoUrl"] });
   const report = await buildStudentReport(student.id, req.params.termId);
   if (!report) throw ApiError.notFound("Report data not found");
   await attachRank(report, effectiveClassId, req.params.termId);
@@ -83,6 +83,7 @@ const getStudentReport = asyncHandler(async (req, res) => {
   report.schoolAddress = school?.address || null;
   report.schoolEmail = school?.email || null;
   report.schoolPhone = school?.phone || null;
+  report.schoolLogoUrl = school?.logoUrl || null;
   report.classCategory = report.student.classCategory;
   res.json({ report });
 });
@@ -120,7 +121,7 @@ const getClassReport = asyncHandler(async (req, res) => {
   const klass = await assertClassAccess(req.params.classId, req);
   await assertReportsEnabled(req.params.termId, req);
   const reports = await rankClass(klass.id, req.params.termId);
-  const school = await School.findByPk(req.schoolId, { attributes: ["name", "address", "email", "phone"] });
+  const school = await School.findByPk(req.schoolId, { attributes: ["name", "address", "email", "phone", "logoUrl"] });
   const schoolManagerName = await getSchoolManagerName(req.schoolId);
   res.json({
     className: klass.name,
@@ -130,6 +131,7 @@ const getClassReport = asyncHandler(async (req, res) => {
     schoolAddress: school?.address || null,
     schoolEmail: school?.email || null,
     schoolPhone: school?.phone || null,
+    schoolLogoUrl: school?.logoUrl || null,
     reports,
   });
 });

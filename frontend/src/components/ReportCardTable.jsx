@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -99,6 +100,24 @@ function overallGrade(weightedAverage) {
   return "FAIL";
 }
 
+// Letter grade shown in the class report list's "Grade" column — based
+// purely on the weighted average, independent of the PASS/FAIL competency
+// flag: A 80-100 (A+ for 90-100), B 70-79 (B+ for 75-79), C 60-69
+// (C+ for 65-69), Pass 50-59, Fail 0-49.
+export function letterGrade(weightedAverage) {
+  if (weightedAverage === null || weightedAverage === undefined) return "N/A";
+  const n = Number(weightedAverage);
+  if (Number.isNaN(n)) return "N/A";
+  if (n >= 90) return "A+";
+  if (n >= 80) return "A";
+  if (n >= 75) return "B+";
+  if (n >= 70) return "B";
+  if (n >= 65) return "C+";
+  if (n >= 60) return "C";
+  if (n >= 50) return "Pass";
+  return "Fail";
+}
+
 // Mirrors conductText() in the backend's pdfService.js.
 // Good at >= 20/40 (half), Bad below — same threshold as SBMS's atRisk flag.
 // Overall Result and Conduct are both shown in plain black text — no
@@ -129,6 +148,65 @@ function watermarkText(className) {
 
 const th = { textAlign: "left" };
 const center = { textAlign: "center" };
+
+// Print fitting (issue 1): a report with many modules used to overflow a
+// single printed A4 page and spill a few rows onto a second page, because
+// every row was always rendered at the same font size regardless of how
+// many rows there were. This shrinks the Academic Performance table's base
+// font size (and cell padding) as the module count grows, so the whole
+// table — and therefore the whole card — keeps fitting on one page.
+function tableFontSizeFor(moduleCount) {
+  if (moduleCount > 22) return 9;
+  if (moduleCount > 18) return 10;
+  if (moduleCount > 14) return 10.5;
+  if (moduleCount > 10) return 11.5;
+  return 13;
+}
+function cellPaddingVFor(moduleCount) {
+  if (moduleCount > 20) return 1.5;
+  if (moduleCount > 14) return 2.5;
+  return 3;
+}
+
+// Print fitting (issue 2, Module Code): same idea as titleFontSizeFor, but
+// tuned for the Code column's narrower width (it holds short codes like
+// "MATH101", but a longer one could still overflow at the table's normal
+// size).
+function codeFontSizeFor(code, tableFontSize) {
+  const len = (code || "").length;
+  let size = tableFontSize;
+  if (len > 12) size = 8;
+  else if (len > 9) size = 9.5;
+  else if (len > 7) size = 11;
+  return Math.min(size, tableFontSize);
+}
+
+// Print fitting (Module Type label): "complementary" is long enough that,
+// at the column's normal font size, its final letter would wrap onto a
+// second line. Shrinks just that label's font size when it's a long word,
+// and is paired with whiteSpace: nowrap in the JSX below so it stays on one
+// line instead of breaking mid-word.
+function typeFontSizeFor(type, tableFontSize) {
+  const base = Math.min(11, tableFontSize);
+  const len = (type || "").length;
+  if (len > 11) return Math.min(base, 9);
+  return base;
+}
+// line because the column has a fixed width. Instead of letting it wrap,
+// each row's name is kept on one line (whiteSpace: nowrap below) and its
+// own font size is shrunk based on how long that particular name is — short
+// names stay at the table's normal size, only long ones get smaller. Never
+// goes above the table's own (already-shrunk) font size.
+function titleFontSizeFor(title, tableFontSize) {
+  const len = (title || "").length;
+  let size = tableFontSize;
+  if (len > 70) size = 7;
+  else if (len > 55) size = 8;
+  else if (len > 45) size = 9;
+  else if (len > 35) size = 10;
+  else if (len > 28) size = 11;
+  return Math.min(size, tableFontSize);
+}
 
 function SectionLabel({ children, color, fontSize }) {
   return (
@@ -201,6 +279,26 @@ function DeliberationGrid({ state }) {
   );
 }
 
+// Shows the school's uploaded logo (set on the admin Profile page) at a
+// fixed height so it lines up with the old GraduationCap icon it replaces.
+// Falls back to that icon if no logo URL is set, or if the URL fails to
+// load (broken link, so the report still prints something recognizable
+// instead of a blank space).
+function SchoolLogo({ url }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return <GraduationCap size={80} color="#0a1f44" style={{ marginBottom: 4 }} />;
+  }
+  return (
+    <img
+      src={url}
+      alt="School logo"
+      onError={() => setFailed(true)}
+      style={{ height: 80, maxWidth: 220, objectFit: "contain", display: "block", marginBottom: 4 }}
+    />
+  );
+}
+
 // The report card as a set of distinct sections — colored banner, student
 // panel, academic performance table, comments & summary, signatures —
 // matching the layout generated server-side for the PDF download (see
@@ -216,11 +314,14 @@ export default function ReportCardTable({
   schoolAddress,
   schoolEmail,
   schoolPhone,
+  schoolLogoUrl,
   className,
   classCategory,
   termName,
 }) {
   const contactLine = [schoolPhone, schoolEmail].filter(Boolean).join("  ·  ");
+  const tableFontSize = tableFontSizeFor(report.modules.length);
+  const cellPaddingV = cellPaddingVFor(report.modules.length);
   return (
     // report-card-page is sized/scaled to fit one printed page — see
     // .report-card-page and its children in index.css. The border here is
@@ -236,6 +337,8 @@ export default function ReportCardTable({
         position: "relative",
         "--report-title-color": REPORT_TITLE_COLOR,
         "--section-title-color": SECTION_TITLE_COLOR,
+        "--report-table-font-size": `${tableFontSize}px`,
+        "--report-cell-padding-v": `${cellPaddingV}px`,
       }}
     >
       {/* Banner: centered title/term on top, then school (left) and
@@ -253,7 +356,7 @@ export default function ReportCardTable({
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-            <GraduationCap size={40} color="#0a1f44" style={{ marginBottom: 4 }} />
+            <SchoolLogo url={schoolLogoUrl} />
             <div style={{ fontWeight: 700, fontSize: 12, lineHeight: 1.3 }}>{schoolName || "School"}</div>
             {schoolAddress && (
               <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>{schoolAddress}</div>
@@ -276,25 +379,30 @@ export default function ReportCardTable({
         </div>
       </div>
 
-      <SectionLabel color={SECTION_TITLE_COLOR} fontSize={14}>ACADEMIC PERFORMANCE</SectionLabel>
+      <SectionLabel color={SECTION_TITLE_COLOR} fontSize={14}>ACADEMIC PERFORMANCE ANALYSIS - MID TERM REPORT</SectionLabel>
 
       <table className="report-table report-avoid-break" style={{ marginBottom: 4, tableLayout: "fixed", width: "100%" }}>
         <colgroup>
-          <col style={{ width: "16%" }} />
           <col style={{ width: "13%" }} />
-          <col style={{ width: "38%" }} />
-          <col style={{ width: "11%" }} />
-          <col style={{ width: "10%" }} />
           <col style={{ width: "12%" }} />
+          <col style={{ width: "43%" }} />
+          <col style={{ width: "9%" }} />
+          <col style={{ width: "9%" }} />
+          <col style={{ width: "14%" }} />
         </colgroup>
         <thead>
           <tr>
-            <th style={{ ...center, whiteSpace: "nowrap" }}>Module Type</th>
-            <th style={{ ...th, whiteSpace: "nowrap" }}>Code</th>
-            <th style={th}>Module Name</th>
-            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "3px 6px" }}>Weight</th>
-            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "3px 6px" }}>Score</th>
-            <th style={{ ...center, whiteSpace: "nowrap", fontSize: 11, padding: "3px 6px" }}>Decision</th>
+            {/* Renamed from "Module Type" to just "Type" — a shorter label
+                that comfortably fits the column's 13% width on one line at
+                every table font size, so there's no need to rely on
+                wrapping to avoid the header overflowing into "Code" (see
+                the two-line wrap fix this replaces). */}
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: Math.min(14, tableFontSize + 1) }}>Type</th>
+            <th style={{ ...th, whiteSpace: "nowrap", fontSize: Math.min(14, tableFontSize + 1) }}>Code</th>
+            <th style={{ ...th, fontSize: Math.min(14, tableFontSize + 1) }}>Module Name</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: tableFontSize }}>Weight</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: tableFontSize }}>Score</th>
+            <th style={{ ...center, whiteSpace: "nowrap", fontSize: tableFontSize }}>Decision</th>
           </tr>
         </thead>
         <tbody>
@@ -318,16 +426,59 @@ export default function ReportCardTable({
                     wordBreak: "break-word",
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: 11, textTransform: "capitalize", lineHeight: 1.2 }}>
+                  {/* whiteSpace was "nowrap" here, which forced long words
+                      like "complementary" onto a single line — but the
+                      column is only 13% wide, so at that width the text
+                      visually overflowed the cell border and spilled into
+                      the Code column next to it. The cell already sets
+                      overflowWrap/wordBreak: "break-word", so removing
+                      nowrap lets a long label wrap onto a second line
+                      (centered, since it has room via rowSpan) and stay
+                      inside its own column instead of overflowing. */}
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      fontSize: typeFontSizeFor(m.type, tableFontSize),
+                      textTransform: "capitalize",
+                      lineHeight: 1.2,
+                    }}
+                  >
                     {m.type || "general"}
                   </div>
-                  <div style={{ fontSize: 9, fontWeight: 400, marginTop: 3, lineHeight: 1.2 }}>
+                  <div
+                    style={{
+                      fontSize: Math.min(9, tableFontSize - 1.5),
+                      fontWeight: 400,
+                      marginTop: 3,
+                      lineHeight: 1.2,
+                    }}
+                  >
                     Passing line {(m.type || "general") === "specific" ? 70 : 50}%
                   </div>
                 </td>
               )}
-              <td style={{ fontWeight: 700, whiteSpace: "nowrap", padding: "3px 8px" }}>{m.code || "-"}</td>
-              <td>{m.title}</td>
+              <td
+                style={{
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  padding: `${cellPaddingV}px 6px`,
+                  fontSize: codeFontSizeFor(m.code, tableFontSize),
+                }}
+              >
+                {m.code || "-"}
+              </td>
+              <td
+                style={{
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  fontSize: titleFontSizeFor(m.title, tableFontSize),
+                }}
+              >
+                {m.title}
+              </td>
               <td style={{ ...center, fontWeight: 700, whiteSpace: "nowrap", padding: "3px 6px" }}>{m.weight}</td>
               <td
                 style={{
@@ -412,13 +563,17 @@ export default function ReportCardTable({
         </tbody>
       </table>
 
-      {deliberationState(report) && (
-        <DeliberationGrid state={deliberationState(report)} />
-      )}
+      {/* Deliberation + Signatures grouped as one "footer" block. Kept as a
+          single group mostly for readability now — the card auto-sizes to
+          its content, so this no longer needs any special pinning. */}
+      <div className="report-footer">
+        {deliberationState(report) && (
+          <DeliberationGrid state={deliberationState(report)} />
+        )}
 
-      <SectionLabel>SIGNATURES</SectionLabel>
+        <SectionLabel>SIGNATURES</SectionLabel>
 
-      <div className="report-avoid-break" style={{ marginTop: 6 }}>
+        <div className="report-avoid-break" style={{ marginTop: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 11 }}>{report.classTeacherName || "Not assigned"}</div>
@@ -458,6 +613,7 @@ export default function ReportCardTable({
             {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
           </span>
           <span>Class: {classLabel(className || report.student?.class, classCategory ?? report.student?.classCategory)}</span>
+        </div>
         </div>
       </div>
 

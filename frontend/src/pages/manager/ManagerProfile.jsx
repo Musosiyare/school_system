@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../../api/client";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -8,7 +8,7 @@ import { Field, Input, IconInput } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import ChangePasswordCard from "../../components/ChangePasswordCard";
 import AccountNameCard from "../../components/AccountNameCard";
-import { Building2, UserCircle, KeyRound, Mail, Phone, MapPin, Image as ImageIcon } from "lucide-react";
+import { Building2, UserCircle, KeyRound, Mail, Phone, MapPin, Image as ImageIcon, Upload, X } from "lucide-react";
 
 const emptyForm = { name: "", address: "", phone: "", email: "", logoUrl: "" };
 
@@ -26,6 +26,9 @@ export default function ManagerProfile() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState("");
+  const logoInputRef = useRef(null);
 
   async function load() {
     setLoading(true);
@@ -69,6 +72,44 @@ export default function ManagerProfile() {
     }
   }
 
+  // Uploads the file straight away (rather than waiting for the "Save
+  // Changes" button below, which only PATCHes the plain text fields) since
+  // it needs multipart/form-data, not JSON. Immediate feedback here also
+  // means the preview updates the moment the upload finishes.
+  async function handleLogoFileChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    setLogoError("");
+    setLogoBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append("logo", file);
+      const { data } = await api.post("/schools/me/logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setForm((f) => ({ ...f, logoUrl: data.school.logoUrl || "" }));
+    } catch (err) {
+      setLogoError(err.message);
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function handleRemoveLogo() {
+    setLogoError("");
+    setLogoBusy(true);
+    try {
+      await api.patch("/schools/me", { ...form, logoUrl: "" });
+      setForm((f) => ({ ...f, logoUrl: "" }));
+    } catch (err) {
+      setLogoError(err.message);
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex justify-end mb-6">
@@ -102,8 +143,43 @@ export default function ManagerProfile() {
               <Field label="Address" className="sm:col-span-2">
                 <IconInput icon={MapPin} value={form.address} onChange={(e) => updateField("address", e.target.value)} />
               </Field>
-              <Field label="Logo URL" className="sm:col-span-2">
-                <IconInput icon={ImageIcon} value={form.logoUrl} onChange={(e) => updateField("logoUrl", e.target.value)} />
+              <Field label="School Logo" className="sm:col-span-2">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    {form.logoUrl ? (
+                      <img src={form.logoUrl} alt="School logo" className="h-full w-full object-contain" />
+                    ) : (
+                      <ImageIcon size={22} className="text-slate-300" />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={logoBusy}
+                        onClick={() => logoInputRef.current?.click()}
+                      >
+                        <Upload size={14} /> {logoBusy ? "Uploading..." : form.logoUrl ? "Replace" : "Upload logo"}
+                      </Button>
+                      {form.logoUrl && (
+                        <Button type="button" variant="ghost" size="sm" disabled={logoBusy} onClick={handleRemoveLogo}>
+                          <X size={14} /> Remove
+                        </Button>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-400">PNG, JPG, or WEBP, up to 2MB.</span>
+                    <ErrorText>{logoError}</ErrorText>
+                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleLogoFileChange}
+                  />
+                </div>
               </Field>
               <div className="sm:col-span-2 flex items-center gap-3">
                 <Button type="submit" disabled={saving}>

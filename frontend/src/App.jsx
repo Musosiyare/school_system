@@ -36,6 +36,7 @@ import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherProfile from "./pages/teacher/TeacherProfile";
 import PastYears from "./pages/teacher/PastYears";
 import ModuleStatus from "./pages/teacher/ModuleStatus";
+import TeacherStatistics from "./pages/teacher/TeacherStatistics";
 
 export default function App() {
   return (
@@ -213,6 +214,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["teacher"]}>
                   <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/teacher/statistics"
+              element={
+                <ProtectedRoute roles={["teacher"]}>
+                  <TeacherStatistics />
                 </ProtectedRoute>
               }
             />

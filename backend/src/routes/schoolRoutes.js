@@ -7,9 +7,11 @@ const {
   getManagerTempPassword,
   getMySchool,
   updateMySchool,
+  uploadSchoolLogo,
   getPlatformStats,
 } = require("../controllers/schoolController");
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
+const uploadLogo = require("../middleware/uploadLogo");
 
 router.use(authenticate);
 
@@ -17,6 +19,7 @@ router.use(authenticate);
 // Placed before the superuser "/:id" routes so "me" is never matched as an id.
 router.get("/me", authorize("manager"), scopeToSchool, getMySchool);
 router.patch("/me", authorize("manager"), scopeToSchool, updateMySchool);
+router.post("/me/logo", authorize("manager"), scopeToSchool, uploadLogo.single("logo"), uploadSchoolLogo);
 
 // Superuser: manage all schools across the platform.
 router.post("/", authorize("superuser"), createSchool);

@@ -5,8 +5,13 @@ import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
+import Loader from "../../components/ui/Loader";
 import { Field, Select } from "../../components/ui/FormField";
+import SearchInput from "../../components/ui/SearchInput";
 import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
+import RankBadge from "../../components/ui/RankBadge";
+import ScoreCell from "../../components/ui/ScoreCell";
+import { avatarColorFor, initialsFor } from "../../utils/avatarColor";
 import ReportCardTable, { classLabel, toDecision } from "../../components/ReportCardTable";
 import {
   CalendarClock,
@@ -53,6 +58,7 @@ export default function PastYears() {
   const [viewingStudent, setViewingStudent] = useState(null); // { id, name } or null
   const [studentReport, setStudentReport] = useState(null);
   const [studentReportError, setStudentReportError] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
 
   // --- "My Modules" section: marks for a module/class the teacher taught in
   // the selected past year, term by term. Works for every teacher, not just
@@ -184,6 +190,7 @@ export default function PastYears() {
   useEffect(() => {
     setError("");
     setClassReport(null);
+    setStudentSearch("");
     if (!selectedClassId || !selectedTermId) return;
     // A locked term gets its own dedicated message instead (see the
     // "Report" tab render below) — no need to hit the backend, which would
@@ -218,6 +225,12 @@ export default function PastYears() {
     ? [...classReport.reports].sort((a, b) => (a.classRank ?? Infinity) - (b.classRank ?? Infinity))
     : [];
 
+  // Live search: filters the already-loaded class report client-side, by
+  // student name — matches as you type.
+  const filteredReports = studentSearch.trim()
+    ? sortedReports.filter((r) => r.student.name.toLowerCase().includes(studentSearch.trim().toLowerCase()))
+    : sortedReports;
+
   return (
     <div>
       <Card>
@@ -228,7 +241,7 @@ export default function PastYears() {
         </div>
 
         {loadingYears ? (
-          <p className="text-sm text-slate-400 py-4 text-center">Loading academic years…</p>
+          <Loader label="Loading academic years…" size="sm" />
         ) : years.length === 0 ? (
           <div className="flex flex-col items-center text-center gap-2 py-8">
             <CalendarClock className="text-slate-300" size={28} />
@@ -378,7 +391,7 @@ export default function PastYears() {
 
       {activeTab === "report" && isClassTeacherThisYear && !selectedTerm?.isLocked && loadingReport && (
         <Card>
-          <p className="text-sm text-slate-400 py-4 text-center">Loading report…</p>
+          <Loader label="Loading report…" />
         </Card>
       )}
 
@@ -387,6 +400,19 @@ export default function PastYears() {
           title={`${classLabel(classReport.className, classReport.classCategory)} — ${selectedTerm?.name} (${selectedYear?.name})`}
           subtitle={`Class Teacher: ${classReport.reports[0]?.classTeacherName || "Not assigned"} · School Manager: ${classReport.schoolManagerName || "Not assigned"}`}
         >
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <p className="text-xs text-slate-400">
+              {sortedReports.length} student{sortedReports.length === 1 ? "" : "s"} in this class.
+            </p>
+            {sortedReports.length > 0 && (
+              <SearchInput
+                value={studentSearch}
+                onChange={setStudentSearch}
+                placeholder="Search student…"
+                className="w-full sm:w-64"
+              />
+            )}
+          </div>
           <Table>
             <Thead>
               <tr>
@@ -399,30 +425,42 @@ export default function PastYears() {
             </Thead>
             <tbody>
               {sortedReports.length === 0 && <EmptyRow colSpan={5}>No students in this class.</EmptyRow>}
-              {sortedReports.map((r) => (
-                <tr key={r.student.id}>
-                  <Td>{r.classRank ? `${r.classRank} / ${r.classRankTotal}` : "-"}</Td>
-                  <Td>
-                    <div className="flex items-center gap-2">
-                      <GraduationCap size={14} className="text-slate-300 shrink-0" />
-                      {r.student.name}
-                    </div>
-                  </Td>
-                  <Td>{r.weightedAverage !== null && r.weightedAverage !== undefined ? `${r.weightedAverage}%` : "N/A"}</Td>
-                  <Td>
-                    <span
-                      className={`font-medium ${r.overallResult === "PASS" ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {toDecision(r.overallResult)}
-                    </span>
-                  </Td>
-                  <Td className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => openStudentReport(r.student)}>
-                      <Eye size={13} /> View
-                    </Button>
-                  </Td>
-                </tr>
-              ))}
+              {sortedReports.length > 0 && filteredReports.length === 0 && (
+                <EmptyRow colSpan={5}>No students match "{studentSearch}".</EmptyRow>
+              )}
+              {filteredReports.map((r) => {
+                const avatar = avatarColorFor(r.student.name);
+                return (
+                  <tr key={r.student.id} className="transition-colors duration-150 hover:bg-slate-50">
+                    <Td>
+                      <RankBadge rank={r.classRank} total={r.classRankTotal} />
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatar.bg} ${avatar.text}`}
+                        >
+                          {initialsFor(r.student.name)}
+                        </span>
+                        <span className="font-medium text-slate-800">{r.student.name}</span>
+                      </div>
+                    </Td>
+                    <Td>
+                      <ScoreCell value={r.weightedAverage} />
+                    </Td>
+                    <Td>
+                      <Badge tone={r.overallResult === "PASS" ? "pass" : "fail"}>
+                        {toDecision(r.overallResult)}
+                      </Badge>
+                    </Td>
+                    <Td className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => openStudentReport(r.student)}>
+                        <Eye size={13} /> View
+                      </Button>
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         </Card>
@@ -436,7 +474,7 @@ export default function PastYears() {
           {!selectedYearId ? (
             <p className="text-sm text-slate-400 py-2">Pick an academic year above first.</p>
           ) : loadingModAssignments ? (
-            <p className="text-sm text-slate-400 py-4 text-center">Loading your modules…</p>
+            <Loader label="Loading your modules…" size="sm" />
           ) : modAssignments.length === 0 ? (
             <p className="text-xs text-slate-400">
               You weren't assigned to any module in {selectedYear?.name || "this year"}.
@@ -514,7 +552,7 @@ export default function PastYears() {
               )}
 
               {!selectedModTerm?.isLocked && loadingModMarks && (
-                <p className="text-sm text-slate-400 py-4 text-center">Loading marks…</p>
+                <Loader label="Loading marks…" size="sm" />
               )}
 
               {!selectedModTerm?.isLocked && !loadingModMarks && !modError && selectedModAssignment && selectedModTermId && (
@@ -583,9 +621,7 @@ export default function PastYears() {
             <p className="text-sm text-slate-500 max-w-sm">{studentReportError}</p>
           </div>
         )}
-        {!studentReport && !studentReportError && (
-          <p className="text-sm text-slate-400 py-6 text-center">Loading report…</p>
-        )}
+        {!studentReport && !studentReportError && <Loader label="Loading report…" />}
         {studentReport && (
           <ReportCardTable
             report={studentReport}
@@ -593,6 +629,7 @@ export default function PastYears() {
             schoolAddress={studentReport.schoolAddress}
             schoolEmail={studentReport.schoolEmail}
             schoolPhone={studentReport.schoolPhone}
+            schoolLogoUrl={studentReport.schoolLogoUrl}
             className={classReport?.className}
             classCategory={studentReport.classCategory ?? classReport?.classCategory}
             termName={selectedTerm?.name}

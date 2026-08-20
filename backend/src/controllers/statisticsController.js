@@ -3,6 +3,7 @@ const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
 const { rankClass } = require("../services/reportService");
 const { generateSchoolNumbersReportPdf } = require("../services/pdfService");
+const { getCurrentAcademicYear } = require("../utils/academicYear");
 
 // How many students show up in the school-wide "top performers" list.
 const TOP_PERFORMERS_LIMIT = 2;
@@ -364,4 +365,195 @@ const getSchoolNumbersReportPdf = asyncHandler(async (req, res) => {
   res.send(pdfBuffer);
 });
 
-module.exports = { getSchoolStatistics, getSchoolNumbersReportPdf, getYearsComparison };
+// GET /api/statistics/teacher — teacher-only, scoped strictly to the
+// class(es) this teacher is the CLASS TEACHER of this academic year (not
+// every class they merely teach a module in — a subject teacher without a
+// class-teacher assignment gets an empty result). For each such class:
+// class average, pass rate, grade distribution, top 5 performers, every
+// student currently below 50%, and a per-module breakdown (average % and
+// pass rate) highlighting the class's best-performing module.
+const GRADE_BANDS = [
+  { label: "A", min: 80 },
+  { label: "B", min: 70 },
+  { label: "C", min: 60 },
+  { label: "Pass", min: 50 },
+  { label: "Fail", min: 0 },
+];
+function gradeOf(avg) {
+  return GRADE_BANDS.find((b) => avg >= b.min)?.label || "Fail";
+}
+
+// How many students show up in a class teacher's "top performers" list.
+const TOP_PERFORMERS_FOR_CLASS_TEACHER = 5;
+// A student is flagged as a slow learner once their weighted average
+// drops below this line.
+const SLOW_LEARNER_THRESHOLD = 50;
+
+const getTeacherStatistics = asyncHandler(async (req, res) => {
+  const schoolId = req.schoolId;
+  const teacherId = req.user.id;
+
+  const currentYear = await getCurrentAcademicYear(schoolId);
+  if (!currentYear) {
+    return res.json({
+      academicYear: null,
+      availableTerms: [],
+      term: null,
+      classes: [],
+    });
+  }
+
+  const terms = await Term.findAll({
+    where: { academicYearId: currentYear.id },
+    order: [["id", "ASC"]],
+  });
+  const availableTerms = terms.map((t) => ({ id: t.id, name: t.name }));
+
+  let term = null;
+  if (req.query.termId) {
+    term = availableTerms.find((t) => String(t.id) === String(req.query.termId)) || null;
+  } else if (availableTerms.length > 0) {
+    term = availableTerms[0];
+  }
+
+  // Only classes where this teacher is the CLASS TEACHER — merely teaching
+  // a module in a class doesn't qualify.
+  const ownClasses = await Class.findAll({
+    where: { schoolId, academicYearId: currentYear.id, classTeacherId: teacherId, isSuspended: false },
+    order: [["name", "ASC"]],
+  });
+
+  if (!term || ownClasses.length === 0) {
+    res.json({
+      academicYear: { id: currentYear.id, name: currentYear.name },
+      availableTerms,
+      term: term ? { id: term.id, name: term.name } : null,
+      classes: ownClasses.map((c) => ({
+        classId: c.id,
+        className: c.name,
+        studentsRanked: 0,
+        classAverage: null,
+        classPassRate: null,
+        topLearners: [],
+        slowLearners: [],
+        gradeDistribution: [],
+        moduleBreakdown: [],
+        bestModule: null,
+      })),
+    });
+    return;
+  }
+
+  const classStats = await Promise.all(
+    ownClasses.map(async (c) => {
+      const reports = await rankClass(c.id, term.id);
+      const ranked = reports.filter((r) => r && r.weightedAverage !== null);
+
+      const top = ranked
+        .slice()
+        .sort((a, b) => b.weightedAverage - a.weightedAverage)
+        .slice(0, TOP_PERFORMERS_FOR_CLASS_TEACHER)
+        .map((r) => ({
+          studentId: r.student.id,
+          name: r.student.name,
+          weightedAverage: r.weightedAverage,
+          classRank: r.classRank,
+        }));
+
+      // Every student currently below the pass-concern line — not capped
+      // to a fixed count, since a class teacher needs to see all of them.
+      const slow = ranked
+        .filter((r) => r.weightedAverage < SLOW_LEARNER_THRESHOLD)
+        .slice()
+        .sort((a, b) => a.weightedAverage - b.weightedAverage)
+        .map((r) => ({
+          studentId: r.student.id,
+          name: r.student.name,
+          weightedAverage: r.weightedAverage,
+          classRank: r.classRank,
+        }));
+
+      const classAverage = ranked.length
+        ? +(ranked.reduce((sum, r) => sum + r.weightedAverage, 0) / ranked.length).toFixed(2)
+        : null;
+      const classPassRate = ranked.length
+        ? +((ranked.filter((r) => r.overallResult === "PASS").length / ranked.length) * 100).toFixed(1)
+        : null;
+
+      // How many students land in each letter-grade band (A/B/C/Pass/Fail),
+      // for a quick spread-of-performance view per class.
+      const distCounts = { A: 0, B: 0, C: 0, Pass: 0, Fail: 0 };
+      ranked.forEach((r) => {
+        distCounts[gradeOf(r.weightedAverage)] += 1;
+      });
+      const gradeDistribution = GRADE_BANDS.map((b) => ({ grade: b.label, count: distCounts[b.label] }));
+
+      // Per-module average % and pass rate — built from every ranked
+      // student's own module rows (only counting modules they actually
+      // have a recorded score for), so the class teacher can see which
+      // subject the class as a whole is strongest/weakest in.
+      const moduleAgg = new Map(); // moduleId -> { title, code, sum, count, passCount }
+      ranked.forEach((r) => {
+        (r.modules || []).forEach((m) => {
+          if (m.score === null || m.score === undefined) return;
+          if (!moduleAgg.has(m.moduleId)) {
+            moduleAgg.set(m.moduleId, { title: m.title, code: m.code, sum: 0, count: 0, passCount: 0 });
+          }
+          const entry = moduleAgg.get(m.moduleId);
+          entry.sum += (m.score / m.maxScore) * 100;
+          entry.count += 1;
+          if (m.status === "PASS") entry.passCount += 1;
+        });
+      });
+      const moduleBreakdown = [...moduleAgg.entries()]
+        .map(([moduleId, e]) => ({
+          moduleId,
+          title: e.title,
+          code: e.code,
+          average: +(e.sum / e.count).toFixed(2),
+          passRate: +((e.passCount / e.count) * 100).toFixed(1),
+          studentsRecorded: e.count,
+        }))
+        .sort((a, b) => b.average - a.average);
+      const bestModule = moduleBreakdown[0] || null;
+
+      return {
+        classId: c.id,
+        className: c.name,
+        studentsRanked: ranked.length,
+        totalStudents: reports.length,
+        classAverage,
+        classPassRate,
+        topLearners: top,
+        slowLearners: slow,
+        gradeDistribution,
+        moduleBreakdown,
+        bestModule,
+      };
+    })
+  );
+
+  const rankedClasses = classStats.filter((c) => c.classAverage !== null);
+  const overallAverage = rankedClasses.length
+    ? +(rankedClasses.reduce((sum, c) => sum + c.classAverage * c.studentsRanked, 0) /
+        rankedClasses.reduce((sum, c) => sum + c.studentsRanked, 0)
+      ).toFixed(2)
+    : null;
+  const bestClass = rankedClasses.slice().sort((a, b) => b.classAverage - a.classAverage)[0] || null;
+  const weakestClass =
+    rankedClasses.length > 1 ? rankedClasses.slice().sort((a, b) => a.classAverage - b.classAverage)[0] : null;
+
+  res.json({
+    academicYear: { id: currentYear.id, name: currentYear.name },
+    availableTerms,
+    term: { id: term.id, name: term.name },
+    overallAverage,
+    bestClass: bestClass ? { classId: bestClass.classId, className: bestClass.className, average: bestClass.classAverage } : null,
+    weakestClass: weakestClass
+      ? { classId: weakestClass.classId, className: weakestClass.className, average: weakestClass.classAverage }
+      : null,
+    classes: classStats,
+  });
+});
+
+module.exports = { getSchoolStatistics, getSchoolNumbersReportPdf, getYearsComparison, getTeacherStatistics };

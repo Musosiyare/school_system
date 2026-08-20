@@ -663,7 +663,7 @@ function reportCardContent(report, schoolName, schoolAddress, className, termNam
           schoolPhone,
           classCategory
         ),
-        sectionLabel("ACADEMIC PERFORMANCE", SECTION_TITLE_COLOR, 13),
+        sectionLabel("ACADEMIC PERFORMANCE ANALYSIS - MID TERM REPORT", SECTION_TITLE_COLOR, 12),
         moduleTable(report.modules),
         naNote(report.modules),
         summaryStrip(report),

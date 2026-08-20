@@ -68,6 +68,19 @@ body {
     margin: 0;
     padding: 0;
   }
+  /* Fixes trailing blank pages: visibility:hidden (above) keeps a hidden
+     element's HEIGHT in the page flow, it just makes it invisible. #root
+     holds the entire normal app UI (sidebar, tables, filters, etc.), which
+     is often taller than one printed page — so even a single one-page
+     report card used to print followed by extra blank pages sized to that
+     hidden leftover height. #print-root is portaled to be a sibling of
+     #root directly under <body> (see the createPortal call in
+     Reports.jsx), so collapsing #root here with display:none — which
+     removes it from layout entirely, unlike visibility:hidden — can't
+     affect #print-root, and nothing is left to paginate into blank pages. */
+  #root {
+    display: none !important;
+  }
   @page {
     size: A4;
     margin: 12mm;
@@ -112,16 +125,22 @@ body {
   #print-root .report-section-title-color * {
     color: var(--section-title-color) !important;
   }
-  /* Gives .report-card-page a floor of exactly one A4 page's content height
-     (297mm minus the 12mm top+bottom @page margin above = 273mm), so every
-     printed report card fills a full page (border included) even when its
-     content — banner, academic table, summary, signatures — is short. A
-     card whose content is genuinely taller than one page still falls back
-     to natural pagination — min-height only sets a floor, it never clips or
-     forces overflow. */
+  /* The card sizes to its own content (box-sizing so border/padding are
+     included) instead of being forced to fill a full A4 page. A report
+     with many modules will naturally run close to — or fill — a full page
+     on its own; a report with few modules just stays short, so there's no
+     artificial gap between the Academic Performance table and the footer.
+     page-break-inside: avoid (below, on .report-card-page) still stops a
+     genuinely tall card from being split mid-section. */
   #print-root .report-card-page {
-    min-height: 273mm;
     box-sizing: border-box;
+  }
+  /* .report-page's own padding-bottom (below) used to add on top of the
+     card's old forced min-height, pushing content past one page's content
+     area. Pages are already separated by page-break-after above, so no
+     extra bottom padding is needed here either way. */
+  #print-root .report-page {
+    padding-bottom: 0;
   }
 }
 
@@ -132,15 +151,20 @@ body {
   border-collapse: collapse;
   color: #000;
   background: #fff;
-  font-size: 13px;
+  /* Falls back to 13px when not inside .report-card-page (which sets
+     --report-table-font-size dynamically based on module count — see
+     tableFontSizeFor() in ReportCardTable.jsx). */
+  font-size: var(--report-table-font-size, 13px);
 }
 .report-table th,
 .report-table td {
   border: 1px solid #000;
   /* Kept tight (vs. the old 8px 12px) so the Academic Performance table can
      hold at least 16 module rows on one printed page without the extra
-     rows overflowing onto a second page. */
-  padding: 3px 6px;
+     rows overflowing onto a second page. Vertical padding shrinks further
+     on reports with a lot of modules — see cellPaddingVFor() in
+     ReportCardTable.jsx. */
+  padding: var(--report-cell-padding-v, 3px) 6px;
   text-align: left;
   color: #000;
   vertical-align: middle;
@@ -150,6 +174,8 @@ body {
 .report-table th {
   font-weight: 700;
   background: #fff;
+  /* Headings get more breathing room than the tightly-packed data rows. */
+  padding: 7px 8px;
 }
 .report-page {
   page-break-after: always;
@@ -174,13 +200,15 @@ body {
      legible fixed size and let the surrounding .overflow-x-auto wrapper
      (see Reports.jsx) provide horizontal scrolling instead. */
   min-width: 680px;
-  /* Report text uses Bookman Old Style. It's a Windows/Office font, not a
-     web font bundled with the app, so it only renders as Bookman Old Style
-     on devices that have it installed (Windows, or Office installed on
-     Mac); everywhere else it falls back to the nearest similar serif so
-     the report still looks intentional rather than reverting to the app's
-     default sans-serif. */
-  font-family: "Bookman Old Style", "URW Bookman", "Bookman", Georgia, "Times New Roman", serif;
+  /* Report text uses Lora — a Google Font bundled via the <link> in
+     index.html, so (unlike the old Bookman Old Style, which only rendered
+     correctly on Windows/Office machines that had it installed) it now
+     looks identical for every reader and printer regardless of device.
+     It's an elegant, legible serif that reads well as small as the 7-8px
+     labels used further down this card. The old system-font names are
+     kept as a fallback chain in case the Google Font ever fails to load
+     (e.g. printing while offline before it's been cached). */
+  font-family: "Lora", "Georgia", "Times New Roman", serif;
 }
 
 /* Applied to the banner, panels, table rows, remarks and the signature row

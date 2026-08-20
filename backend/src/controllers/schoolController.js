@@ -1,4 +1,6 @@
 const bcrypt = require("bcryptjs");
+const fs = require("fs");
+const path = require("path");
 const { School, User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
@@ -247,6 +249,36 @@ const updateMySchool = asyncHandler(async (req, res) => {
   res.json({ school });
 });
 
+// POST /api/schools/me/logo — a manager uploading their school's logo as an
+// image file. multer (see middleware/uploadLogo.js) has already validated
+// and saved the file to disk under uploads/logos/ by the time this runs;
+// this just records its public URL on the school and cleans up the
+// previous logo file so uploads don't pile up forever.
+const uploadSchoolLogo = asyncHandler(async (req, res) => {
+  if (!req.file) throw ApiError.badRequest("No image uploaded. Attach it as 'logo'.");
+
+  const school = await School.findByPk(req.schoolId);
+  if (!school) throw ApiError.notFound("School not found");
+
+  const previousLogoUrl = school.logoUrl;
+  school.logoUrl = `${req.protocol}://${req.get("host")}/uploads/logos/${req.file.filename}`;
+  await school.save();
+
+  // Only clean up if the old logo was itself one of our uploads (not an
+  // externally-hosted URL someone pasted in) — and run the filename through
+  // path.basename() so a crafted logoUrl (e.g. containing "../") can't be
+  // used to make this delete an arbitrary file on the server.
+  if (previousLogoUrl && previousLogoUrl.includes("/uploads/logos/")) {
+    const uploadDir = path.join(__dirname, "..", "..", "uploads", "logos");
+    const oldFilename = path.basename(previousLogoUrl.split("/uploads/logos/")[1] || "");
+    if (oldFilename) {
+      fs.unlink(path.join(uploadDir, oldFilename), () => {}); // best-effort, ignore errors
+    }
+  }
+
+  res.json({ school });
+});
+
 module.exports = {
   createSchool,
   listSchools,
@@ -255,5 +287,6 @@ module.exports = {
   getManagerTempPassword,
   getMySchool,
   updateMySchool,
+  uploadSchoolLogo,
   getPlatformStats,
 };
