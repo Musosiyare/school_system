@@ -37,12 +37,24 @@ import {
 } from "lucide-react";
 
 const ROLE_META = {
-  superuser: { label: "Superuser", accent: "bg-violet-600", text: "text-violet-600", ring: "ring-violet-200", tint: "bg-violet-50 border-violet-100", hover: "hover:bg-violet-100/70" },
-  manager: { label: "Manager", accent: "bg-brand-500", text: "text-brand-500", ring: "ring-brand-200", tint: "bg-brand-50 border-brand-100", hover: "hover:bg-brand-100/70" },
+  superuser: { label: "Superuser", accent: "bg-orange-500", text: "text-orange-500", ring: "ring-orange-200", tint: "bg-orange-50 border-orange-100", hover: "hover:bg-orange-100/70" },
+  manager: { label: "Manager", accent: "bg-orange-500", text: "text-orange-600", ring: "ring-orange-200", tint: "bg-orange-50 border-orange-100", hover: "hover:bg-orange-100/70" },
   // Same palette as manager — teacher used to have its own teal theme, but
   // the design is meant to be identical across roles (only the nav items
   // and page content differ).
-  teacher: { label: "Teacher", accent: "bg-brand-500", text: "text-brand-500", ring: "ring-brand-200", tint: "bg-brand-50 border-brand-100", hover: "hover:bg-brand-100/70" },
+  teacher: { label: "Teacher", accent: "bg-orange-500", text: "text-orange-600", ring: "ring-orange-200", tint: "bg-orange-50 border-orange-100", hover: "hover:bg-orange-100/70" },
+};
+
+// Sidebar/header chrome per role — kept separate from ROLE_META above so the
+// deep gradient background (sidebar + sticky header) can differ from the
+// lighter accent tint used for in-nav badges and the profile card. Superuser
+// gets a near-black identity so it's never confused with a school view;
+// manager and teacher share a deep teal identity. Orange is the shared
+// accent (active nav state, hairline, logo mark) across both.
+const CHROME_META = {
+  superuser: { sidebar: "from-neutral-900 via-black to-neutral-950", header: "bg-neutral-900" },
+  manager: { sidebar: "from-teal-800 via-teal-950 to-black", header: "bg-teal-950" },
+  teacher: { sidebar: "from-teal-800 via-teal-950 to-black", header: "bg-teal-950" },
 };
 
 // Each role's nav is a mix of standalone links and groups. A group shows as
@@ -338,6 +350,7 @@ export default function Layout({ children }) {
   }
 
   const meta = ROLE_META[user.role];
+  const chrome = CHROME_META[user.role] || CHROME_META.manager;
   const navItems = (NAV[user.role] || [])
     .map((entry) => {
       if (entry.type !== "group") return entry;
@@ -391,7 +404,7 @@ export default function Layout({ children }) {
             ${isCollapsed ? "justify-center px-2" : "px-3"}
             ${active ? "bg-white/10 border-white/10 text-white" : "border-transparent text-slate-300 hover:bg-white/5 hover:text-white"}`}
         >
-          <Icon size={17} className={`shrink-0 ${active ? "text-gold-400" : ""}`} />
+          <Icon size={17} className={`shrink-0 ${active ? "text-orange-400" : ""}`} />
           {!isCollapsed && entry.label}
         </Link>
       );
@@ -492,7 +505,7 @@ export default function Layout({ children }) {
                 <img src={user.schoolLogoUrl} alt="School logo" className="h-full w-full object-contain" />
               </div>
             ) : (
-              <div className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center shadow-sm shadow-black/30">
+              <div className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-sm shadow-black/30">
                 <School size={18} strokeWidth={2.25} className="text-white" />
               </div>
             )}
@@ -567,7 +580,7 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex bg-slate-50">
       {/* Desktop sidebar: always visible from md breakpoint up, pinned while the page scrolls */}
       <aside
-        className={`hidden md:flex md:sticky md:top-0 md:h-screen shrink-0 bg-gradient-to-b from-brand-600 via-brand-700 to-brand-900 border-r border-black/20 flex-col transition-[width] duration-200
+        className={`hidden md:flex md:sticky md:top-0 md:h-screen shrink-0 bg-gradient-to-b ${chrome.sidebar} border-r border-black/20 flex-col transition-[width] duration-200
           ${collapsed ? "w-[72px]" : "w-64"}`}
       >
         {renderSidebarContent(collapsed)}
@@ -580,7 +593,7 @@ export default function Layout({ children }) {
             className="fixed inset-0 bg-slate-900/40"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="relative z-50 w-64 max-w-[80vw] bg-gradient-to-b from-brand-600 via-brand-700 to-brand-900 border-r border-black/20 flex flex-col h-full">
+          <aside className={`relative z-50 w-64 max-w-[80vw] bg-gradient-to-b ${chrome.sidebar} border-r border-black/20 flex flex-col h-full`}>
             {renderSidebarContent(false)}
           </aside>
         </div>
@@ -588,9 +601,9 @@ export default function Layout({ children }) {
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Page header: hamburger (mobile only) + icon/title/subtitle + date. Sticky so it stays visible while the page content scrolls. */}
-        <header className="relative sticky top-0 z-30 flex items-center gap-3 bg-brand-700 px-4 sm:px-6 lg:px-8 py-3.5 shrink-0">
-          {/* Signature hairline — the one gold flourish, echoing the logo mark */}
-          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-500/70 to-transparent" />
+        <header className={`relative sticky top-0 z-30 flex items-center gap-3 ${chrome.header} px-4 sm:px-6 lg:px-8 py-3.5 shrink-0`}>
+          {/* Signature hairline — the one orange flourish, echoing the logo mark */}
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-orange-500/70 to-transparent" />
 
           <button
             onClick={() => setMobileNavOpen(true)}
@@ -610,7 +623,7 @@ export default function Layout({ children }) {
           </button>
 
           {PageIcon && (
-            <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 border border-gold-500/40 text-white">
+            <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 border border-orange-500/40 text-white">
               <PageIcon size={19} strokeWidth={2} />
             </div>
           )}

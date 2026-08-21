@@ -49,25 +49,28 @@ function StatCard({ icon: Icon, label, value, sub, accent, onClick, clickable })
       type="button"
       onClick={onClick}
       disabled={!clickable}
-      className={`group text-left bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm transition-all duration-200
+      title={sub || label}
+      className={`group text-left bg-white border border-slate-200 rounded-xl p-2.5 shadow-sm transition-all duration-200
         ${clickable ? "hover:shadow-md hover:-translate-y-0.5 hover:border-slate-300 cursor-pointer" : "cursor-default opacity-70"}`}
     >
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-center gap-2 mb-1">
         <div
-          className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
+          className={`h-6 w-6 shrink-0 rounded-lg flex items-center justify-center bg-gradient-to-br ${accent} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}
         >
-          <Icon size={18} />
+          <Icon size={12} />
+        </div>
+        <div className="min-w-0 flex-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 truncate">
+          {label}
         </div>
         {clickable && (
           <ArrowRight
-            size={14}
-            className="mt-1.5 text-slate-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition"
+            size={11}
+            className="shrink-0 text-slate-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition"
           />
         )}
       </div>
-      <div className="text-xl sm:text-2xl font-bold text-slate-800">{value}</div>
-      <div className="text-xs sm:text-sm text-slate-500">{label}</div>
-      {sub && <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>}
+      <div className="text-base sm:text-lg font-bold text-slate-800 leading-tight truncate">{value}</div>
+      {sub && <div className="text-[10px] text-slate-400 truncate">{sub}</div>}
     </button>
   );
 }
@@ -471,7 +474,7 @@ export default function SuperuserDashboard() {
       <ErrorText>{statsError}</ErrorText>
 
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
           {statCards.map((s) => (
             <StatCard key={s.key} clickable {...s} />
           ))}

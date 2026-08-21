@@ -776,7 +776,7 @@ export default function MarksEntry() {
           title={`Marks — ${currentAssignment.Module?.moduleTitle} (${currentAssignment.Class?.name})`}
           subtitle={`Module weight / max score: ${maxScore}`}
           actions={
-            <div className="grid grid-cols-2 gap-2 w-full lg:flex lg:w-auto lg:flex-wrap lg:items-center">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full lg:flex lg:w-auto lg:flex-wrap lg:items-center">
               <Button
                 size="sm"
                 variant="teal"
