@@ -92,9 +92,30 @@ async function getPermanentlyDismissedStudentIds(studentIds) {
   return new Set(rows.map((r) => r.studentId));
 }
 
+/**
+ * Whether this student has ANY misconduct record in SBMS at all — pending,
+ * finalized, or rejected, in any term. Used to block deleting a student
+ * from this side: SBMS's sbms_misconduct_records.student_id has no FK back
+ * to this system's students table (separate app, separate repo), so a
+ * delete here would silently orphan SBMS's incident history instead of
+ * failing loudly — the record would sit there pointing at a student_id
+ * that no longer exists, and anything in SBMS that looks the student back
+ * up (report PDFs, the class-browser, discussion threads) would break.
+ * Same raw-query-not-a-Model approach as the rest of this file (see
+ * file-level note above).
+ */
+async function hasMisconductRecords(studentId) {
+  const [row] = await sequelize.query(
+    `SELECT COUNT(*) AS count FROM sbms_misconduct_records WHERE student_id = :studentId`,
+    { replacements: { studentId }, type: QueryTypes.SELECT }
+  );
+  return Number(row?.count || 0) > 0;
+}
+
 module.exports = {
   MARKS_PER_TERM,
   getTermConductScore,
   getTermDismissalDecision,
   getPermanentlyDismissedStudentIds,
+  hasMisconductRecords,
 };

@@ -5,6 +5,7 @@ import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import { Field, Select } from "../../components/ui/FormField";
+import ClassDropdown from "../../components/ui/ClassDropdown";
 import { ErrorText } from "../../components/ui/Alerts";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
@@ -16,7 +17,6 @@ import {
   Search,
   ChevronDown,
   UserRound,
-  Layers,
 } from "lucide-react";
 
 export default function Assignments() {
@@ -246,38 +246,7 @@ export default function Assignments() {
             />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1 text-xs font-medium text-slate-400 uppercase tracking-wide">
-              <Layers size={13} /> Class
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setClassFilter("all")}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  classFilter === "all"
-                    ? "bg-brand-500 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                All classes
-              </button>
-              {classes.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setClassFilter(String(c.id))}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                    classFilter === String(c.id)
-                      ? "bg-brand-500 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ClassDropdown classes={classes} value={classFilter} onChange={setClassFilter} />
         </div>
 
         {groups.length === 0 && (
@@ -361,14 +330,14 @@ export default function Assignments() {
         <form noValidate onSubmit={handleSave} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Class">
-              <Select value={classId} onChange={(e) => handleClassChange(e.target.value)} required>
-                <option value="">Select class</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
+              <ClassDropdown
+                classes={classes}
+                value={classId}
+                onChange={handleClassChange}
+                includeAll={false}
+                placeholder="Select class"
+                fullWidth
+              />
             </Field>
             <Field label="Teacher">
               <Select

@@ -2,6 +2,7 @@ const VARIANTS = {
   primary: "bg-brand-500 text-white hover:bg-brand-600 focus-visible:ring-brand-400",
   secondary: "bg-white text-brand-500 border border-brand-200 hover:bg-brand-50",
   danger: "bg-red-600 text-white hover:bg-red-700",
+  success: "bg-emerald-600 text-white hover:bg-emerald-700",
   ghost: "bg-transparent text-slate-600 hover:bg-slate-100",
   teal: "bg-teal-500 text-white hover:bg-teal-600",
   violet: "bg-violet-600 text-white hover:bg-violet-700",

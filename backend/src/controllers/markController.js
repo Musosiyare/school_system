@@ -68,6 +68,14 @@ async function saveMarkEntries({ classId, moduleId, termId, entries, userId, sch
     if (!student) {
       throw ApiError.badRequest(`Student ${entry.studentId} is not in this class`);
     }
+    // Marks shouldn't be recorded for a student who's been marked
+    // inactive — enforced here (not just hidden in the UI) so this also
+    // blocks a stale downloaded template or a direct API call.
+    if (student.status === "inactive") {
+      throw ApiError.badRequest(
+        `${student.firstName} ${student.lastName} is marked inactive and can't have marks recorded. Reactivate them first if this is a mistake.`
+      );
+    }
 
     const [mark] = await Mark.findOrCreate({
       where: { studentId: entry.studentId, moduleId, termId },
@@ -177,7 +185,9 @@ const downloadMarksTemplate = asyncHandler(async (req, res) => {
     schoolId: req.schoolId,
   });
 
-  const students = await Student.findAll({ where: { classId }, order: [["firstName", "ASC"]] });
+  // Inactive students shouldn't get a blank row for a teacher to fill in —
+  // they're not expected to be marked this term.
+  const students = await Student.findAll({ where: { classId, status: "active" }, order: [["firstName", "ASC"]] });
   const marks = await Mark.findAll({ where: { classId, moduleId, termId } });
   const scoreByStudent = Object.fromEntries(marks.map((m) => [m.studentId, m.score]));
 
@@ -351,11 +361,32 @@ const importMarksTemplate = asyncHandler(async (req, res) => {
     );
   }
 
+  // A template downloaded before a student was marked inactive can still
+  // have a leftover score sitting in their row — skip those with a
+  // warning instead of failing the whole import, same as any other
+  // per-row problem above.
+  const activeStudents = await Student.findAll({
+    where: { classId: numericClassId, status: "active" },
+    attributes: ["id"],
+  });
+  const activeIds = new Set(activeStudents.map((s) => s.id));
+  const validEntries = entries.filter((e) => {
+    if (activeIds.has(e.studentId)) return true;
+    warnings.push(`Student ID ${e.studentId}: marked inactive, score skipped.`);
+    return false;
+  });
+
+  if (validEntries.length === 0) {
+    throw ApiError.badRequest(
+      "No valid scores found for active students in the uploaded file."
+    );
+  }
+
   const results = await saveMarkEntries({
     classId: numericClassId,
     moduleId: numericModuleId,
     termId,
-    entries,
+    entries: validEntries,
     userId: req.user.id,
     schoolId: req.schoolId,
   });
@@ -405,7 +436,10 @@ async function loadMarksEvidenceData(req) {
     teacherName = requester?.name || "Unknown";
   }
 
-  const students = await Student.findAll({ where: { classId }, order: [["firstName", "ASC"]] });
+  // This is the official evidence marksheet (PDF/Excel export), so it
+  // should list the same set of students who were actually expected to be
+  // marked — active ones.
+  const students = await Student.findAll({ where: { classId, status: "active" }, order: [["firstName", "ASC"]] });
   const marks = await Mark.findAll({ where: { classId, moduleId, termId } });
   const scoreByStudent = Object.fromEntries(marks.map((m) => [m.studentId, m.score]));
 

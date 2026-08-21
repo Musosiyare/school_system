@@ -240,9 +240,12 @@ const listClasses = asyncHandler(async (req, res) => {
   // show them without a separate round trip per class. Uses the same
   // enrollment-aware roster resolution as the student list/roster PDF, so
   // the counts always match what a manager sees when they open a class.
+  // Only active students are counted here — an inactive student stays in
+  // the roster (a manager can still find/reactivate them) but shouldn't be
+  // counted as part of the class's current headcount.
   const rosters = await Promise.all(visible.map((c) => getClassRoster(c.id)));
   const classesWithCounts = visible.map((c, i) => {
-    const roster = rosters[i];
+    const roster = rosters[i].filter((s) => s.status !== "inactive");
     const boys = roster.filter((s) => s.sex === "M").length;
     const girls = roster.filter((s) => s.sex === "F").length;
     return {
@@ -459,7 +462,9 @@ const getIncompleteMarks = asyncHandler(async (req, res) => {
   const term = await Term.findOne({ where: { id: termId } });
   if (!term) throw ApiError.badRequest("Invalid termId");
 
-  const totalStudents = await Student.count({ where: { classId: klass.id } });
+  // Inactive students aren't expected to have marks recorded, so they
+  // shouldn't count toward "missing marks" totals/completion status.
+  const totalStudents = await Student.count({ where: { classId: klass.id, status: "active" } });
   const moduleIds = klass.ClassModules.map((cm) => cm.moduleId);
 
   const [assignments, marks, disabledStatuses] = await Promise.all([

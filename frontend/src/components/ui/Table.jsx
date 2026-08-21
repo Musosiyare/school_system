@@ -1,9 +1,9 @@
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
-export function Table({ children }) {
+export function Table({ children, className = "text-sm" }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="w-full text-sm">{children}</table>
+      <table className={`w-full ${className}`}>{children}</table>
     </div>
   );
 }

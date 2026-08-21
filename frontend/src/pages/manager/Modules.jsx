@@ -6,10 +6,11 @@ import Modal from "../../components/ui/Modal";
 import Pagination from "../../components/ui/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 import { Field, Input, IconInput, IconSelect } from "../../components/ui/FormField";
+import ClassDropdown from "../../components/ui/ClassDropdown";
 import { ErrorText } from "../../components/ui/Alerts";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
-import { Pencil, Trash2, Plus, BookOpen, Layers, ChevronDown, School2, Hash, Gauge, ListFilter } from "lucide-react";
+import { Pencil, Trash2, Plus, BookOpen, ChevronDown, School2, Hash, Gauge, ListFilter } from "lucide-react";
 
 const emptyForm = { moduleCode: "", moduleTitle: "", moduleWeight: 100, moduleType: "general" };
 
@@ -359,36 +360,7 @@ export default function Modules() {
 
       <Card title="Existing Modules" subtitle="Weight controls how much a module counts toward the overall weighted average.">
         <div className="flex items-center gap-2 flex-wrap mb-4">
-          <span className="flex items-center gap-1 text-xs font-medium text-slate-400 uppercase tracking-wide">
-            <Layers size={13} /> Toggle by class taught
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setClassFilter("all")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                classFilter === "all"
-                  ? "bg-brand-500 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              All classes
-            </button>
-            {classes.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setClassFilter(String(c.id))}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  classFilter === String(c.id)
-                    ? "bg-brand-500 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
+          <ClassDropdown classes={classes} value={classFilter} onChange={setClassFilter} allLabel="All classes" />
         </div>
 
         {classGroups.length === 0 && (

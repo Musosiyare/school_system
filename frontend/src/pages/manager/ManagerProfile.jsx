@@ -8,6 +8,7 @@ import { Field, Input, IconInput } from "../../components/ui/FormField";
 import { ErrorText, SuccessText } from "../../components/ui/Alerts";
 import ChangePasswordCard from "../../components/ChangePasswordCard";
 import AccountNameCard from "../../components/AccountNameCard";
+import { useAuth } from "../../context/AuthContext";
 import { Building2, UserCircle, KeyRound, Mail, Phone, MapPin, Image as ImageIcon, Upload, X } from "lucide-react";
 
 const emptyForm = { name: "", address: "", phone: "", email: "", logoUrl: "" };
@@ -19,6 +20,7 @@ const TABS = [
 ];
 
 export default function ManagerProfile() {
+  const { updateUser } = useAuth();
   const [tab, setTab] = useState("school");
   const [form, setForm] = useState(emptyForm);
   const [status, setStatus] = useState("active");
@@ -90,6 +92,9 @@ export default function ManagerProfile() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setForm((f) => ({ ...f, logoUrl: data.school.logoUrl || "" }));
+      // Keep the sidebar/header logo in sync immediately, without waiting
+      // for the next login or page refresh to pick up the new image.
+      updateUser({ schoolLogoUrl: data.school.logoUrl || "" });
     } catch (err) {
       setLogoError(err.message);
     } finally {
@@ -103,6 +108,7 @@ export default function ManagerProfile() {
     try {
       await api.patch("/schools/me", { ...form, logoUrl: "" });
       setForm((f) => ({ ...f, logoUrl: "" }));
+      updateUser({ schoolLogoUrl: "" });
     } catch (err) {
       setLogoError(err.message);
     } finally {

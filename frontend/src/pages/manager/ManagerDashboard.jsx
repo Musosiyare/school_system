@@ -36,7 +36,9 @@ export default function ManagerDashboard() {
       );
       const map = {};
       classList.forEach((c, idx) => {
-        map[c.id] = studentLists[idx] || [];
+        // Inactive students stay off the dashboard's headcount and
+        // per-class rosters, same as everywhere else in the app.
+        map[c.id] = (studentLists[idx] || []).filter((s) => s.status !== "inactive");
       });
 
       setClasses(classList);
@@ -283,17 +285,19 @@ function GettingStarted({ steps }) {
 
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm mb-6 overflow-hidden">
-      <div className="p-5 sm:p-6 bg-gradient-to-r from-brand-500 to-brand-600 text-white">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <div className="relative overflow-hidden p-5 sm:p-6 bg-gradient-to-br from-brand-600 via-brand-500 to-brand-600 text-white">
+        <div className="pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -bottom-14 -left-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="relative flex items-center justify-between flex-wrap gap-2 mb-3">
           <h3 className="text-base font-semibold">Getting Started</h3>
           <span className="text-sm font-medium bg-white/15 rounded-full px-3 py-0.5 inline-flex items-center gap-1.5">
             {allDone && <i className="bi bi-stars" aria-hidden="true" />}
             {allDone ? "All set" : `${doneCount}/${total} done`}
           </span>
         </div>
-        <div className="h-2 rounded-full bg-white/20 overflow-hidden">
+        <div className="relative h-2 rounded-full bg-white/20 overflow-hidden">
           <div
-            className="h-full rounded-full bg-white transition-all duration-500"
+            className="h-full rounded-full bg-white/90 transition-all duration-500"
             style={{ width: `${pct}%` }}
           />
         </div>

@@ -289,3 +289,24 @@ tr.report-avoid-break {
     animation: none;
   }
 }
+
+/* --- ClassDropdown popover entrance ---------------------------------- */
+@keyframes dropdown-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.dropdown-pop {
+  animation: dropdown-pop-in 0.14s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-pop {
+    animation: none;
+  }
+}

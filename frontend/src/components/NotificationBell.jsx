@@ -67,7 +67,7 @@ export default function NotificationBell() {
     <div className="relative" ref={wrapRef}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1.5 transition-colors"
+        className="relative text-slate-300 hover:text-white hover:bg-white/10 rounded-lg p-1.5 transition-colors"
         aria-label="Notifications"
         title="Notifications"
       >

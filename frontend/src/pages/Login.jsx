@@ -2,21 +2,10 @@ import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useMaintenance } from "../context/MaintenanceContext";
+import { Field, Input } from "../components/ui/FormField";
+import Button from "../components/ui/Button";
 import { ErrorText, SuccessText } from "../components/ui/Alerts";
-import {
-  School,
-  GraduationCap,
-  ClipboardCheck,
-  BarChart3,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
-  FileText,
-  Users,
-  Wrench,
-} from "lucide-react";
+import { School, Eye, EyeOff, Wrench } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -42,9 +31,28 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+
+    const trimmedIdentifier = identifier.trim();
+
+    // Custom validation, not the browser's — matches the same pattern used
+    // on SBMS's login, so a person sees a plain sentence in place instead
+    // of a native "please fill out this field" popup.
+    if (!trimmedIdentifier && !password) {
+      setError("Email/phone and password are required.");
+      return;
+    }
+    if (!trimmedIdentifier) {
+      setError("Please enter your email or phone number.");
+      return;
+    }
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const user = await login(identifier, password);
+      const user = await login(trimmedIdentifier, password);
       if (user.mustChangePassword) {
         navigate("/change-password");
         return;
@@ -58,13 +66,6 @@ export default function Login() {
       setSubmitting(false);
     }
   }
-
-  // Real facts about the system — not invented marketing numbers.
-  const stats = [
-    { value: "5", label: "User roles" },
-    { value: "Auto", label: "Averages & ranks" },
-    { value: "PDF", label: "Print-ready reports" },
-  ];
 
   // The actual overall-result bands used on every generated report card.
   const grades = [
@@ -129,12 +130,14 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex bg-brand-700">
-      {/* Left brand panel — hidden on small screens */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 text-white overflow-hidden bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500">
-        <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-teal-400/20 blur-3xl" />
+    <div className="min-h-screen flex bg-white">
+      {/* Identity panel — the system's own brand navy, same layout language
+          as SBMS's login (icon + wordmark top, headline mid, copyright
+          bottom), but kept in this system's own color so the two sibling
+          apps still read as visually distinct at a glance. */}
+      <div className="relative hidden md:flex md:w-[42%] lg:w-[38%] flex-col justify-between overflow-hidden bg-gradient-to-b from-brand-700 via-brand-600 to-brand-500 px-12 py-12 text-white">
         <div
+          aria-hidden
           className="pointer-events-none absolute inset-0 opacity-[0.06]"
           style={{
             backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)",
@@ -142,227 +145,117 @@ export default function Login() {
           }}
         />
 
-        <Link to="/" className="relative flex items-center gap-2.5 w-fit">
-          <div className="h-10 w-10 rounded-lg bg-white/15 flex items-center justify-center backdrop-blur ring-1 ring-white/20">
-            <School size={20} />
+        <Link to="/" className="relative flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white shadow-sm backdrop-blur">
+            <School size={19} />
           </div>
-          <span className="font-semibold text-lg tracking-tight">Mid-Term Reporting System</span>
+          <div className="leading-tight">
+            <p className="font-display text-2xl font-extrabold leading-none tracking-tight text-white">
+              Mid-Term Reporting
+            </p>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-brand-100/70">
+              Academics · Reporting
+            </p>
+          </div>
         </Link>
 
-        <div className="relative">
-          <span className="inline-block text-[11px] font-semibold tracking-[0.15em] uppercase text-brand-100/90 bg-white/10 px-3 py-1 rounded-full mb-5 ring-1 ring-white/15">
-            Built for TVET Schools
-          </span>
-          {/* The headline states the real workflow — record, then rank,
-              then report — so it does the job a separate step list would,
-              without repeating itself underneath. */}
-          <h2 className="font-black text-5xl leading-[1.05] tracking-tight">
-            <span className="text-white">Record Marks.</span>
+        <div className="relative max-w-sm">
+          <h1 className="font-display text-4xl font-extrabold leading-[1.15] text-white lg:text-[2.75rem]">
+            Record marks.
             <br />
-            <span className="text-teal-300">Rank Classes.</span>
-            <br />
-            <span className="text-brand-200">Print Reports.</span>
-          </h2>
-          <p className="text-brand-100 mt-5 text-sm leading-relaxed max-w-sm">
-            One place for academic years, classes, modules and marks — and the report cards they
-            produce, ready to print or download.
+            Print reports.
+          </h1>
+          <p className="mt-5 text-[15px] leading-relaxed text-brand-100/80">
+            One place for academic years, classes, modules and marks — and
+            the report cards they produce, ready to print or download.
           </p>
-
-          <div className="mt-12 flex items-center gap-10">
-            {stats.map((s) => (
-              <div key={s.label}>
-                <p className="font-black text-3xl text-white leading-none">{s.value}</p>
-                <p className="text-brand-200 text-xs mt-1.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Grading legend — the actual four overall-result bands used on
-            every report card, standing in for a generic footer tagline. */}
-        <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="mt-6 flex items-center gap-4">
             {grades.map((g) => (
-              <span key={g.label} className="flex items-center gap-1.5 text-[11px] text-brand-100">
+              <span key={g.label} className="flex items-center gap-1.5 text-[11px] text-brand-100/80">
                 <span className={`h-2 w-2 rounded-full ${g.tone}`} />
                 {g.label}
               </span>
             ))}
           </div>
-          <p className="text-xs text-brand-200">© {new Date().getFullYear()}</p>
         </div>
+
+        <p className="relative text-xs text-brand-100/60">
+          &copy; {new Date().getFullYear()} Mid-Term Reporting System · Built for TVET Schools
+        </p>
       </div>
 
-      {/* Right form panel */}
-      <div className="flex-1 relative flex items-center justify-center px-4 py-12 overflow-hidden bg-slate-50">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 15% 15%, rgba(43,58,103,0.06), transparent 45%), radial-gradient(circle at 85% 85%, rgba(13,148,136,0.07), transparent 45%)",
-          }}
-        />
-        <div className="relative w-full max-w-sm">
-          <Link to="/" className="flex flex-col items-center mb-6 lg:hidden">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mb-3 shadow-lg shadow-brand-500/25">
-              <School size={26} className="text-white" />
+      {/* Form side */}
+      <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm">
+          {/* mobile-only identity, since the brand panel is hidden below md */}
+          <div className="mb-8 flex items-center gap-3 md:hidden">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white">
+              <School size={20} />
             </div>
-            <h1 className="text-lg font-semibold text-slate-800">Mid-Term Reporting System</h1>
-          </Link>
-
-          {/* Compact feature strip for small screens, standing in for the
-              hidden left panel's marketing content. */}
-          <div className="flex items-center justify-center gap-5 mb-7 lg:hidden">
-            {[
-              { icon: Users, label: "Students" },
-              { icon: BarChart3, label: "Marks" },
-              { icon: FileText, label: "Reports" },
-            ].map((f) => (
-              <div key={f.label} className="flex flex-col items-center gap-1">
-                <div className="h-9 w-9 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center ring-1 ring-brand-100">
-                  <f.icon size={16} />
-                </div>
-                <span className="text-[11px] text-slate-400 font-medium">{f.label}</span>
-              </div>
-            ))}
+            <div className="leading-tight">
+              <p className="font-display text-lg font-extrabold text-slate-800">Mid-Term Reporting</p>
+              <p className="text-xs text-slate-500">Mid-Term Reporting System</p>
+            </div>
           </div>
 
-          {/* Floating card */}
-          <div className="relative bg-white rounded-[28px] shadow-[0_30px_70px_-20px_rgba(43,58,103,0.35)] px-8 pt-9 pb-8">
-            <div className="flex flex-col items-center text-center mb-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-12 w-12 rounded-2xl bg-brand-50 flex items-center justify-center ring-1 ring-brand-100">
-                  <GraduationCap size={20} className="text-brand-600" />
-                </div>
-                <div className="h-12 w-12 rounded-2xl bg-teal-50 flex items-center justify-center ring-1 ring-teal-100">
-                  <ClipboardCheck size={20} className="text-teal-600" />
-                </div>
-              </div>
+          <h2 className="font-display text-3xl font-extrabold text-slate-900">Sign in</h2>
+          <p className="mt-2 text-sm text-slate-500">Enter your credentials to open your dashboard.</p>
 
-              <div className="flex items-center gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white bg-gradient-to-r from-brand-600 to-teal-600 px-3 py-1 rounded-full">
-                  <Lock size={10} /> Secure sign in
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                  5 roles supported
-                </span>
-              </div>
+          <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-5">
+            <SuccessText>{resetSuccess ? "Password updated. Please sign in." : null}</SuccessText>
 
-              <h1 className="font-black text-[26px] text-slate-900 tracking-tight">Welcome back</h1>
-              <p className="text-sm text-slate-500 mt-1.5">
-                Sign in to your <span className="font-semibold text-slate-700">Mid-Term Reporting System</span> account
-              </p>
+            <Field label="Email or Phone">
+              <Input
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="you@school.edu or 07xxxxxxxx"
+                autoComplete="username"
+                autoFocus
+              />
+            </Field>
 
-              {/* Grade-band divider — the same legend from the left panel,
-                  repurposed here as a small, meaningful rule instead of a
-                  decorative progress dot. */}
-              <div className="flex items-center gap-2.5 mt-5">
-                {grades.map((g) => (
-                  <span key={g.label} className={`h-1.5 w-1.5 rounded-full ${g.tone}`} title={g.label} />
-                ))}
-              </div>
-            </div>
-
-            <form noValidate onSubmit={handleSubmit} className="space-y-4">
-              <SuccessText>{resetSuccess ? "Password updated. Please sign in." : null}</SuccessText>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold tracking-wide uppercase text-slate-500">
-                  Email or Phone
-                </label>
-                <div className="relative">
-                  <Mail
-                    size={17}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-400"
-                  />
-                  <input
-                    type="text"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="you@school.edu or 07xxxxxxxx"
-                    autoComplete="username"
-                    required
-                    autoFocus
-                    className="form-field w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-3 py-3 text-sm text-slate-800
-                      placeholder:text-slate-400 outline-none transition
-                      focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold tracking-wide uppercase text-slate-500">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock
-                    size={17}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-400"
-                  />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    required
-                    className="form-field w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-10 py-3 text-sm text-slate-800
-                      placeholder:text-slate-400 outline-none transition
-                      focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100"
-                  />
+            <Field
+              label={
+                <span className="flex items-center justify-between">
+                  <span>Password</span>
                   <button
                     type="button"
                     onClick={() => setShowPassword((s) => !s)}
-                    tabIndex={-1}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-brand-600"
                   >
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                    {showPassword ? "Hide" : "Show"}
                   </button>
-                </div>
-              </div>
+                </span>
+              }
+            >
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+            </Field>
 
-              <ErrorText>{error}</ErrorText>
+            <ErrorText>{error}</ErrorText>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="group w-full inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-white text-sm py-3.5 mt-2
-                  bg-gradient-to-r from-brand-600 to-teal-600 shadow-lg shadow-brand-500/25
-                  hover:from-brand-500 hover:to-teal-500 transition
-                  disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {submitting ? (
-                  "Signing in..."
-                ) : (
-                  <>
-                    Sign In
-                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-                  </>
-                )}
-              </button>
+            <Button type="submit" disabled={submitting} className="mt-1 w-full" size="lg" variant="primary">
+              {submitting ? "Signing in..." : "Sign in"}
+            </Button>
 
-              <Link
-                to="/forgot-password"
-                className="block text-center text-xs font-semibold text-brand-600 hover:text-brand-700 transition"
-              >
-                Forgot super admin password?
-              </Link>
-            </form>
+            <Link
+              to="/forgot-password"
+              className="block text-center text-xs font-semibold text-brand-600 hover:text-brand-700 transition"
+            >
+              Forgot password?
+            </Link>
+          </form>
 
-            <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400 mt-6">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Secure connection · Your school's data stays private
-            </p>
-          </div>
-
-          <p className="text-xs text-center text-slate-400 mt-4">
+          <p className="mt-6 text-center text-xs leading-relaxed text-slate-400">
             Teacher or manager account? Contact your school administrator to have it reset.
           </p>
-          <Link
-            to="/"
-            className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400 hover:text-brand-600 transition mt-3"
-          >
-            <ArrowRight size={13} className="rotate-180" /> Back to home
-          </Link>
         </div>
       </div>
     </div>

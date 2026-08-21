@@ -29,7 +29,7 @@ export default function ForgotPassword() {
       await api.post("/auth/forgot-password/verify-name", { name });
       setStep("email");
     } catch (err) {
-      setError(err.message || "No super admin account found with that name");
+      setError(err.message || "No account found with that name");
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +67,7 @@ export default function ForgotPassword() {
             <ShieldCheck size={22} className="text-white" />
           </div>
           <h1 className="text-lg font-semibold text-slate-800 text-center">
-            Reset Super Admin Password
+            Reset your password
           </h1>
           <p className="text-sm text-slate-500 mt-1 text-center max-w-xs">
             We'll verify your identity before sending a reset link.
@@ -107,7 +107,7 @@ export default function ForgotPassword() {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter the super admin's full name"
+                    placeholder="Enter the full name on the account"
                     autoComplete="name"
                     autoFocus
                     required
@@ -143,7 +143,7 @@ export default function ForgotPassword() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="superuser@platform.com"
+                    placeholder="you@school.com"
                     autoComplete="email"
                     autoFocus
                     required

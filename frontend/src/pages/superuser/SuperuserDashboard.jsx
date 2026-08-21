@@ -416,8 +416,8 @@ export default function SuperuserDashboard() {
         {
           key: "students",
           label: "Students",
-          value: stats.totals.totalStudents,
-          sub: `${stats.totals.activeStudents} active`,
+          value: stats.totals.activeStudents,
+          sub: `${stats.totals.totalStudents} total enrolled`,
           icon: GraduationCap,
           accent: "from-amber-400 to-amber-600",
           onClick: () => scrollTo(breakdownRef, setOpenBreakdown),

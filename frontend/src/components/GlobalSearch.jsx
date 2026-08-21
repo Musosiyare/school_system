@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, X, GraduationCap, Users, Layers, CalendarRange, BookOpen, Loader2 } from "lucide-react";
+import { Search, X, GraduationCap, Users, Layers, CalendarRange, BookOpen, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import api from "../api/client";
 
 // Live header search across students and teachers (manager only — same
@@ -106,8 +106,8 @@ export default function GlobalSearch() {
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search students, teachers…"
-          className="form-field w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-8 py-1.5 text-sm text-slate-800
-            placeholder:text-slate-400 focus:bg-white focus:border-brand-400 focus:ring-0 outline-none transition shadow-none"
+          className="form-field w-full rounded-lg border border-white/10 bg-white/10 pl-9 pr-8 py-1.5 text-sm text-white
+            placeholder:text-slate-400 focus:bg-white focus:text-slate-800 focus:border-brand-400 focus:ring-0 outline-none transition shadow-none [&:focus~svg]:text-slate-400"
         />
         {loading ? (
           <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 animate-spin" />
@@ -120,7 +120,7 @@ export default function GlobalSearch() {
                 inputRef.current?.focus();
               }}
               aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-white"
             >
               <X size={13} />
             </button>
@@ -176,9 +176,13 @@ export default function GlobalSearch() {
                           {s.admissionNumber && <span className="text-slate-400">#{s.admissionNumber}</span>}
                         </div>
                       </div>
-                      {s.status === "inactive" && (
-                        <span className="shrink-0 rounded-full bg-slate-100 text-slate-500 px-2 py-0.5 text-[10px] font-medium">
-                          Inactive
+                      {s.status === "inactive" ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-600 px-2 py-0.5 text-[10px] font-medium">
+                          <XCircle size={11} className="text-amber-500" /> Inactive
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-600 px-2 py-0.5 text-[10px] font-medium">
+                          <CheckCircle2 size={11} className="text-emerald-500" /> Active
                         </span>
                       )}
                     </button>
@@ -230,9 +234,13 @@ export default function GlobalSearch() {
                           <p className="mt-0.5 text-[11px] text-slate-400">No class assigned yet</p>
                         )}
                       </div>
-                      {t.status === "suspended" && (
-                        <span className="shrink-0 rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[10px] font-medium">
-                          Suspended
+                      {t.status === "suspended" ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[10px] font-medium">
+                          <XCircle size={11} className="text-red-500" /> Suspended
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-600 px-2 py-0.5 text-[10px] font-medium">
+                          <CheckCircle2 size={11} className="text-emerald-500" /> Active
                         </span>
                       )}
                     </button>

@@ -183,13 +183,19 @@ async function rankClass(classId, termId) {
   // a new class would silently vanish from an old term's class report.
   // Records created before enrollment-tracking existed fall back to a live
   // classId match so nothing already in the database goes missing.
+  //
+  // Inactive students are excluded here the same way statisticsController's
+  // getStudentsByClass excludes them — a student marked inactive should
+  // drop off class rankings/report batches/report-card counts just like
+  // they drop off active rosters and student lists everywhere else.
   const [enrollments, liveStudents] = await Promise.all([
     StudentEnrollment.findAll({ where: { classId }, include: [Student] }),
-    Student.findAll({ where: { classId } }),
+    Student.findAll({ where: { classId, status: "active" } }),
   ]);
   const byId = new Map();
   enrollments.forEach((e) => {
-    if (e.Student) byId.set(e.Student.id, e.Student);
+    if (!e.Student || e.Student.status !== "active") return;
+    byId.set(e.Student.id, e.Student);
   });
   liveStudents.forEach((s) => {
     if (!byId.has(s.id)) byId.set(s.id, s);

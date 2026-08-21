@@ -264,7 +264,9 @@ export default function MarksEntry() {
         return;
       }
       const { data: studentsData } = await api.get(`/classes/${currentAssignment.classId}/students`);
-      setStudents(studentsData.students);
+      // Inactive students shouldn't appear in the marks-entry grid — they
+      // aren't expected to be marked.
+      setStudents(studentsData.students.filter((s) => s.status !== "inactive"));
 
       if (!selectedTermId) {
         setScores({});
@@ -314,7 +316,13 @@ export default function MarksEntry() {
       const [studentCountEntries, moduleStatusEntries] = await Promise.all([
         Promise.all(
           uniqueClassIds.map((classId) =>
-            api.get(`/classes/${classId}/students`).then((res) => [classId, res.data.students.length])
+            // Only active students are expected to have marks, so this
+            // "missing marks" denominator should match that, same as the
+            // marks-entry grid itself.
+            api.get(`/classes/${classId}/students`).then((res) => [
+              classId,
+              res.data.students.filter((s) => s.status !== "inactive").length,
+            ])
           )
         ),
         Promise.all(

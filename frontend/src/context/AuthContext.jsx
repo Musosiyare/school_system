@@ -15,6 +15,28 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem("user");
   }, [user]);
 
+  // The cached `user` in localStorage is a snapshot from whenever this
+  // session last logged in — school details (name, logo) can change
+  // afterwards (e.g. a manager uploads a new logo, or it's set for the
+  // first time) and a session that logged in before that update never
+  // sees it until it re-logs-in. Refresh the school-derived fields from
+  // the server once on load so every open session (any role) reflects
+  // the current logo/name, not a stale one.
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    api
+      .get("/auth/me")
+      .then(({ data }) => {
+        setUser((prev) => (prev ? { ...prev, ...data.user } : prev));
+      })
+      .catch(() => {
+        // ignore — keep whatever's cached; a real auth failure surfaces
+        // on the next protected call via the response interceptor
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function login(identifier, password) {
     setLoading(true);
     try {

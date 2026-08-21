@@ -10,6 +10,7 @@ import { useYear } from "../../context/YearContext";
 import { usePagination } from "../../hooks/usePagination";
 import { useSort } from "../../hooks/useSort";
 import { Field, Input, Select, IconInput, IconSelect } from "../../components/ui/FormField";
+import ClassDropdown from "../../components/ui/ClassDropdown";
 import { ErrorText } from "../../components/ui/Alerts";
 import { Table, Thead, Th, SortableTh, Td, EmptyRow } from "../../components/ui/Table";
 import SearchInput from "../../components/ui/SearchInput";
@@ -26,29 +27,30 @@ import {
   UserCircle2,
   Phone,
   Cake,
-  Layers,
   CopyPlus,
   CalendarDays,
   Users,
   Info,
   ArrowRight,
   Ban,
-  ChevronDown,
   Check,
+  CheckCircle2,
 } from "lucide-react";
 
 const emptyForm = { firstName: "", lastName: "", dob: "", sex: "", guardianName: "", guardianPhone: "" };
-
-function formatDob(dob) {
-  if (!dob) return null;
-  return new Date(dob).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
 
 // Shown in place of DOB/guardian/etc. when the field is empty in the
 // database (null or ""), so a missing value reads as clearly missing
 // rather than blending in with real data.
 function NA() {
   return <span className="italic text-amber-500">N/A</span>;
+}
+
+function formatDob(dob) {
+  if (!dob) return "";
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function sexLabel(sex) {
@@ -72,6 +74,7 @@ export default function Students() {
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [sexFilter, setSexFilter] = useState(""); // "" = all, "M" = boys, "F" = girls
+  const [statusFilter, setStatusFilter] = useState("active"); // "" = all, "active", "inactive"
 
   // Arriving from the header search (?classId=&highlight=): preselect the
   // class once classes have loaded, then glow + scroll to the row once
@@ -156,6 +159,25 @@ export default function Students() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightParam]);
 
+  // Arriving from search at an inactive student: the default "Active"
+  // filter would otherwise hide them from the list entirely, so the glow
+  // scroll-to above would never find a row to land on. Switch to "All" so
+  // whoever they searched for actually shows up.
+  useEffect(() => {
+    if (!highlightId || students.length === 0) return;
+    const target = students.find((s) => s.id === highlightId);
+    if (target && target.status === "inactive" && statusFilter === "active") {
+      setStatusFilter("");
+    }
+    // Deliberately NOT depending on statusFilter: this should only fire once,
+    // right when we land from a search hit. If it re-ran every time
+    // statusFilter changes, it would fight the manager's own clicks — e.g.
+    // clicking "Active" right after landing on an inactive student would get
+    // immediately flipped back to "All", making the Active tab look broken
+    // until a full page refresh cleared highlightId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, students]);
+
   function updateField(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
@@ -212,8 +234,6 @@ export default function Students() {
   }
 
   const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
-  const boysCount = students.filter((s) => s.sex === "M").length;
-  const girlsCount = students.filter((s) => s.sex === "F").length;
 
   // Source-class options for pulling: any class NOT in the year currently
   // being viewed (pulling is for bringing students in from another year —
@@ -326,6 +346,7 @@ export default function Students() {
 
   const filteredStudents = students.filter((s) => {
     if (sexFilter && s.sex !== sexFilter) return false;
+    if (statusFilter && (s.status || "active") !== statusFilter) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return [s.admissionNumber, s.firstName, s.lastName, s.guardianName, s.guardianPhone]
@@ -333,10 +354,16 @@ export default function Students() {
       .some((field) => field.toLowerCase().includes(q));
   });
 
+  // Boys/girls/total counts reflect whatever is currently filtered
+  // (status, sex, search) so the summary bar always matches what's
+  // actually visible in the table below, not the full class roster.
+  const boysCount = filteredStudents.filter((s) => s.sex === "M").length;
+  const girlsCount = filteredStudents.filter((s) => s.sex === "F").length;
+
   const { sorted: sortedStudents, sort, toggleSort } = useSort(filteredStudents, {
     admissionNumber: (s) => s.admissionNumber,
     name: (s) => `${s.firstName} ${s.lastName}`.toLowerCase(),
-    dob: (s) => (s.dob ? new Date(s.dob).getTime() : null),
+    status: (s) => (s.dismissedPermanently ? 2 : s.status === "inactive" ? 1 : 0),
     sex: (s) => s.sex,
     guardian: (s) => s.guardianName?.toLowerCase(),
   });
@@ -382,7 +409,7 @@ export default function Students() {
     const ok = await confirm({
       title: `Delete ${student.firstName} ${student.lastName}?`,
       message:
-        "This can't be undone. If marks have already been recorded for this student, deletion will be blocked to protect that data.",
+        "This can't be undone. If marks or Behavior/SBMS misconduct records have already been recorded for this student, deletion will be blocked to protect that data.",
       confirmText: "Delete",
       tone: "danger",
     });
@@ -391,12 +418,32 @@ export default function Students() {
       await api.delete(`/students/${student.id}`);
       await loadStudents(selectedClassId);
     } catch (err) {
-      const blockedByMarks = err.code === "STUDENT_HAS_MARKS";
+      const blocked = ["STUDENT_HAS_MARKS", "STUDENT_HAS_MISCONDUCT_RECORDS"].includes(err.code);
       notify({
-        title: blockedByMarks ? "Can't delete this student" : "Delete failed",
+        title: blocked ? "Can't delete this student" : "Delete failed",
         message: err.message,
-        tone: blockedByMarks ? "warning" : "error",
+        tone: blocked ? "warning" : "error",
       });
+    }
+  }
+
+  async function handleToggleStatus(student) {
+    const nextStatus = student.status === "inactive" ? "active" : "inactive";
+    const ok = await confirm({
+      title: nextStatus === "inactive" ? `Mark ${student.firstName} ${student.lastName} inactive?` : `Reactivate ${student.firstName} ${student.lastName}?`,
+      message:
+        nextStatus === "inactive"
+          ? "They'll drop off active rosters and student lists, but their record, marks, and Behavior/SBMS history stay intact. You can reactivate them anytime."
+          : "They'll show up on active rosters and student lists again.",
+      confirmText: nextStatus === "inactive" ? "Mark inactive" : "Reactivate",
+      tone: nextStatus === "inactive" ? "danger" : "primary",
+    });
+    if (!ok) return;
+    try {
+      await api.patch(`/students/${student.id}/status`, { status: nextStatus });
+      await loadStudents(selectedClassId);
+    } catch (err) {
+      notify({ title: "Couldn't update status", message: err.message, tone: "error" });
     }
   }
 
@@ -407,35 +454,24 @@ export default function Students() {
       {/* Class picker + primary actions, grouped together on a navy card so
           the "which class" decision and what you can do with it read as one
           unit instead of two disconnected controls. */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-600 p-5 sm:p-6 mb-6 shadow-lg shadow-brand-500/10">
-        <div className="pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/5" />
-        <div className="pointer-events-none absolute -bottom-14 -left-8 h-40 w-40 rounded-full bg-white/5" />
+      <div className="relative rounded-2xl bg-gradient-to-br from-brand-600 via-brand-500 to-brand-600 p-5 sm:p-6 mb-6 shadow-lg shadow-brand-500/10">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/5" />
+          <div className="absolute -bottom-14 -left-8 h-40 w-40 rounded-full bg-white/5" />
+        </div>
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <label className="flex flex-1 max-w-xs flex-col gap-1.5 text-sm">
-            <span className="flex items-center gap-1.5 font-medium text-white/80">
-              <Layers size={14} /> Class
-            </span>
-            <div className="relative">
-              <select
-                value={selectedClassId}
-                onChange={(e) => setSelectedClassId(e.target.value)}
-                className="form-field w-full appearance-none rounded-xl border border-white/20 bg-white/10 px-3.5 py-2.5 pr-9 text-sm font-medium text-white outline-none backdrop-blur-sm transition placeholder:text-white/50 focus:border-white/40 focus:bg-white/15"
-              >
-                <option value="" className="text-slate-800">
-                  Select a class
-                </option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id} className="text-slate-800">
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={16}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/60"
-              />
-            </div>
-          </label>
+          <div className="flex-1 max-w-xs">
+            <ClassDropdown
+              classes={classes}
+              value={selectedClassId}
+              onChange={setSelectedClassId}
+              includeAll={false}
+              placeholder="Select a class"
+              label="Class"
+              variant="light"
+              fullWidth
+            />
+          </div>
 
           {isCurrentView && (
             <div className="flex flex-wrap gap-2">
@@ -455,6 +491,36 @@ export default function Students() {
           title={`Students in ${selectedClass?.name || ""}`}
           actions={
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                {[
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                  { value: "", label: "All" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setStatusFilter(opt.value)}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition ${
+                      opt.value === "inactive" ? "text-sm" : "text-xs"
+                    } ${
+                      statusFilter === opt.value
+                        ? opt.value === "inactive"
+                          ? "bg-white text-amber-600 shadow-sm"
+                          : "bg-white text-brand-600 shadow-sm"
+                        : opt.value === "inactive"
+                        ? "text-amber-600 hover:text-amber-700"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {statusFilter === opt.value && opt.value !== "inactive" && (
+                      <Check size={12} strokeWidth={3} className="shrink-0 text-brand-500" />
+                    )}
+                    {opt.value === "inactive" && <Ban size={16} strokeWidth={2.5} className="shrink-0 text-amber-500" />}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <div className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
                 {[
                   { value: "", label: "All" },
@@ -492,7 +558,7 @@ export default function Students() {
         >
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 border border-slate-200 px-3.5 py-2.5 mb-4 text-sm">
             <span className="font-semibold text-slate-700">
-              {students.length} Total Student{students.length === 1 ? "" : "s"}
+              {filteredStudents.length} Total Student{filteredStudents.length === 1 ? "" : "s"}
             </span>
             <span className="inline-flex items-center gap-1.5 text-slate-600">
               <span className="h-2 w-2 rounded-full bg-blue-400" />
@@ -508,10 +574,10 @@ export default function Students() {
               <tr>
                 <SortableTh sortKey="admissionNumber" sort={sort} onSort={toggleSort}>Student ID</SortableTh>
                 <SortableTh sortKey="name" sort={sort} onSort={toggleSort}>Name</SortableTh>
-                <SortableTh sortKey="dob" sort={sort} onSort={toggleSort}>DOB</SortableTh>
+                <SortableTh sortKey="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
                 <SortableTh sortKey="sex" sort={sort} onSort={toggleSort}>Sex</SortableTh>
                 <SortableTh sortKey="guardian" sort={sort} onSort={toggleSort}>Guardian</SortableTh>
-                <Th className="text-right">Actions</Th>
+                <Th>Actions</Th>
               </tr>
             </Thead>
             <tbody>
@@ -537,34 +603,44 @@ export default function Students() {
                   className={
                     s.id === highlightId
                       ? "bg-amber-50 ring-1 ring-inset ring-amber-300 transition-colors duration-1000"
-                      : s.dismissedPermanently
+                      : s.dismissedPermanently || s.status === "inactive"
                       ? "bg-red-50/60"
                       : undefined
                   }
                 >
                   <Td className="font-mono text-slate-500">{s.admissionNumber || "-"}</Td>
                   <Td className="font-medium text-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span>
-                        {s.firstName} {s.lastName}
-                      </span>
-                      {s.dismissedPermanently && (
-                        <span title="Dismissed permanently" className="shrink-0">
-                          <Badge tone="fail">
-                            <Ban size={11} /> Dismissed
-                          </Badge>
-                        </span>
-                      )}
-                    </div>
+                    {s.firstName} {s.lastName}
+                    {s.dob ? (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-slate-400">
+                        <Cake size={12} className="text-slate-400 shrink-0" />
+                        {formatDob(s.dob)}
+                      </div>
+                    ) : null}
                   </Td>
                   <Td>
-                    {formatDob(s.dob) ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Cake size={13} className="text-violet-400" />
-                        {formatDob(s.dob)}
+                    {s.dismissedPermanently ? (
+                      // Deliberation outcome always wins over the plain
+                      // active/inactive status — it's the more specific and
+                      // more important thing for a manager to see at a
+                      // glance, so we don't show both at once.
+                      <span title="Dismissed permanently (deliberation outcome)" className="shrink-0">
+                        <Badge tone="fail">
+                          <Ban size={11} /> Dismissed
+                        </Badge>
+                      </span>
+                    ) : s.status === "inactive" ? (
+                      <span title="Inactive" className="shrink-0">
+                        <Badge tone="warning">
+                          <Ban size={11} /> Inactive
+                        </Badge>
                       </span>
                     ) : (
-                      <NA />
+                      <span title="Active" className="shrink-0">
+                        <Badge tone="pass">
+                          <CheckCircle2 size={11} /> Active
+                        </Badge>
+                      </span>
                     )}
                   </Td>
                   <Td>{sexLabel(s.sex)}</Td>
@@ -592,28 +668,48 @@ export default function Students() {
                   </Td>
                   <Td>
                     {isCurrentView ? (
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          title="Edit"
-                          aria-label="Edit"
-                          onClick={() => openEdit(s)}
-                        >
-                          <Pencil size={14} />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          title="Delete"
-                          aria-label="Delete"
-                          onClick={() => handleDelete(s)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
+                      <div className="flex items-center gap-2">
+                        {s.status !== "inactive" && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            title={s.dismissedPermanently ? "Can't edit a dismissed student" : "Edit"}
+                            aria-label="Edit"
+                            onClick={() => openEdit(s)}
+                            disabled={s.dismissedPermanently}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                        )}
+                        {s.status === "inactive" && s.dismissedPermanently ? (
+                          <span className="text-xs italic text-slate-400 self-center">
+                            Dismissed, can't reactivate
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant={s.status === "inactive" ? "success" : "amber"}
+                            title={s.status === "inactive" ? "Reactivate" : "Mark inactive"}
+                            aria-label={s.status === "inactive" ? "Reactivate" : "Mark inactive"}
+                            onClick={() => handleToggleStatus(s)}
+                          >
+                            {s.status === "inactive" ? <Check size={14} /> : <Ban size={14} />}
+                          </Button>
+                        )}
+                        {s.status !== "inactive" && (
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            title="Delete"
+                            aria-label="Delete"
+                            onClick={() => handleDelete(s)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
                       </div>
                     ) : (
-                      <div className="text-right text-xs text-slate-400">Read-only</div>
+                      <div className="text-xs text-slate-400">Read-only</div>
                     )}
                   </Td>
                 </tr>
@@ -677,14 +773,14 @@ export default function Students() {
           )}
 
           <Field label="Class" className="max-w-xs">
-            <IconSelect icon={Layers} value={formClassId} onChange={(e) => setFormClassId(e.target.value)}>
-              <option value="">Select a class</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </IconSelect>
+            <ClassDropdown
+              classes={classes}
+              value={formClassId}
+              onChange={setFormClassId}
+              includeAll={false}
+              placeholder="Select a class"
+              fullWidth
+            />
           </Field>
 
           <div>
@@ -819,19 +915,15 @@ export default function Students() {
                 )}
               </Field>
               <Field label="Class">
-                <IconSelect
-                  icon={Layers}
+                <ClassDropdown
+                  classes={pullSourceClasses}
                   value={pullSourceClassId}
-                  onChange={(e) => setPullSourceClassId(e.target.value)}
+                  onChange={setPullSourceClassId}
+                  includeAll={false}
+                  placeholder="Select class"
                   disabled={!pullSourceYearId}
-                >
-                  <option value="">Select class</option>
-                  {pullSourceClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </IconSelect>
+                  fullWidth
+                />
               </Field>
             </div>
 

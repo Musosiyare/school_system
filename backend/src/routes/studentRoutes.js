@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { createStudent, updateStudent, deleteStudent, getStudentRosterPdf } = require("../controllers/studentController");
+const { createStudent, updateStudent, deleteStudent, setStudentStatus, getStudentRosterPdf } = require("../controllers/studentController");
 const { setRemark } = require("../controllers/remarkController");
 const {
   getStudentReport,
@@ -16,6 +16,7 @@ router.get("/roster/pdf", authorize("manager"), getStudentRosterPdf);
 
 router.post("/", authorize("manager"), createStudent);
 router.put("/:studentId", authorize("manager"), updateStudent);
+router.patch("/:studentId/status", authorize("manager"), setStudentStatus);
 router.delete("/:studentId", authorize("manager"), deleteStudent);
 router.put("/:studentId/remarks/:termId", authorize("manager", "teacher"), setRemark);
 

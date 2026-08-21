@@ -153,7 +153,7 @@ const PAGE_META = {
     icon: History,
   },
   "/manager": {
-    title: (user) => `Welcome back, ${user.name?.split(" ")[0] || ""}`,
+    title: (user) => `${greeting()}, ${user.name?.split(" ")[0] || ""}`,
     subtitle: "Here's your school at a glance.",
     icon: LayoutDashboard,
   },
@@ -189,7 +189,7 @@ const PAGE_META = {
     icon: History,
   },
   "/teacher": {
-    title: (user) => `Welcome back, ${user.name?.split(" ")[0] || ""}`,
+    title: (user) => `${greeting()}, ${user.name?.split(" ")[0] || ""}`,
     subtitle: "What you're teaching this year.",
     icon: LayoutDashboard,
   },
@@ -219,13 +219,27 @@ const PAGE_META = {
   },
 };
 
+// Good morning / afternoon / evening, based on the viewer's local clock —
+// not the server's, since a teacher and the school office may be in
+// different timezones.
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function findGroupIdForPath(user, pathname) {
   if (!user) return null;
   const entries = NAV[user.role] || [];
   const group = entries.find(
     (entry) => entry.type === "group" && entry.items.some((i) => i.to === pathname)
   );
-  return group?.id ?? null;
+  if (group) return group.id;
+  // No group matches the current route (e.g. the dashboard) — default to
+  // the first group open rather than starting collapsed, so the nav isn't
+  // empty-looking on first load.
+  return entries.find((entry) => entry.type === "group")?.id ?? null;
 }
 
 // Nav links that only make sense for a class teacher — Reports shows only
@@ -278,6 +292,30 @@ export default function Layout({ children }) {
       cancelled = true;
     };
   }, [user?.id, user?.role]);
+
+  // Browser tab title — "Reporting - Modules" rather than the greeting shown
+  // on dashboard pages (that reads fine as a page heading, not as a tab title).
+  useEffect(() => {
+    if (!user) return;
+    const meta = PAGE_META[location.pathname] || {};
+    const shortTitle = typeof meta.title === "function" ? "Dashboard" : meta.title || ROLE_META[user.role]?.label || "";
+    document.title = shortTitle ? `Reporting - ${shortTitle}` : "Reporting";
+  }, [location.pathname, user]);
+
+  // Browser tab icon — swap in the school's own logo once we know it, so
+  // each school's tab reads as their own branding rather than the generic
+  // app icon. Falls back to the default favicon for schools with no logo
+  // uploaded yet (or for the superuser, who isn't tied to one school).
+  useEffect(() => {
+    const href = user?.schoolLogoUrl || "/favicon.svg";
+    let link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = href;
+  }, [user?.schoolLogoUrl]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -349,11 +387,11 @@ export default function Layout({ children }) {
           to={entry.to}
           title={isCollapsed ? entry.label : undefined}
           onClick={() => setMobileNavOpen(false)}
-          className={`flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors
+          className={`flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors border
             ${isCollapsed ? "justify-center px-2" : "px-3"}
-            ${active ? `${meta.accent} text-white` : "text-slate-600 hover:bg-slate-100"}`}
+            ${active ? "bg-white/10 border-white/10 text-white" : "border-transparent text-slate-300 hover:bg-white/5 hover:text-white"}`}
         >
-          <Icon size={17} className="shrink-0" />
+          <Icon size={17} className={`shrink-0 ${active ? "text-gold-400" : ""}`} />
           {!isCollapsed && entry.label}
         </Link>
       );
@@ -370,7 +408,7 @@ export default function Layout({ children }) {
 
     if (isCollapsed) {
       return (
-        <div key={entry.id} className="space-y-0.5 pt-1.5 border-t border-slate-100 first:pt-0 first:border-t-0">
+        <div key={entry.id} className="space-y-0.5 pt-1.5 border-t border-white/10 first:pt-0 first:border-t-0">
           {entry.items.map((item) => {
             const ItemIcon = item.icon;
             const active = location.pathname === item.to;
@@ -381,7 +419,7 @@ export default function Layout({ children }) {
                 title={item.label}
                 onClick={() => setMobileNavOpen(false)}
                 className={`flex items-center justify-center h-8 w-full rounded-lg transition-colors
-                  ${active ? `bg-gradient-to-br ${entry.accent} text-white` : "text-slate-500 hover:bg-slate-100"}`}
+                  ${active ? `bg-gradient-to-br ${entry.accent} text-white` : "text-slate-400 hover:bg-white/10 hover:text-white"}`}
               >
                 <ItemIcon size={15} />
               </Link>
@@ -398,7 +436,7 @@ export default function Layout({ children }) {
           onClick={() => setOpenGroupId((prev) => (prev === entry.id ? null : entry.id))}
           aria-expanded={expanded}
           className={`w-full flex items-center gap-2.5 rounded-lg py-1.5 pl-1.5 pr-2.5 text-sm font-medium transition-colors
-            ${expanded || groupActive ? `${entry.tint} border` : "border border-transparent text-slate-600 hover:bg-slate-100"}`}
+            ${expanded || groupActive ? `${entry.tint} border` : "border border-transparent text-slate-300 hover:bg-white/5 hover:text-white"}`}
         >
           <span
             className={`h-7 w-7 shrink-0 rounded-lg flex items-center justify-center bg-gradient-to-br ${entry.accent} text-white shadow-sm transition-transform duration-200 ${expanded ? "scale-105" : ""}`}
@@ -447,17 +485,30 @@ export default function Layout({ children }) {
   function renderSidebarContent(isCollapsed) {
     return (
       <>
-        <div className={`h-14 flex items-center gap-2 px-5 ${meta.accent} ${isCollapsed ? "justify-center px-0" : "justify-between"}`}>
-          <div className="flex items-center gap-2 min-w-0">
-            <School size={20} className="text-white shrink-0" />
+        <div className={`h-16 flex items-center gap-2.5 px-5 border-b border-white/10 ${isCollapsed ? "justify-center px-0" : "justify-between"}`}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            {user.schoolLogoUrl ? (
+              <div className="h-9 w-9 shrink-0 rounded-lg bg-white flex items-center justify-center overflow-hidden ring-1 ring-white/20">
+                <img src={user.schoolLogoUrl} alt="School logo" className="h-full w-full object-contain" />
+              </div>
+            ) : (
+              <div className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center shadow-sm shadow-black/30">
+                <School size={18} strokeWidth={2.25} className="text-white" />
+              </div>
+            )}
             {!isCollapsed && (
-              <span className="text-white font-semibold text-sm leading-tight truncate">
-                Mid-Term Reporting
-              </span>
+              <div className="min-w-0">
+                <span className="block text-white font-semibold text-sm leading-tight truncate">
+                  Mid-Term Reporting
+                </span>
+                <span className="block text-[10px] font-medium uppercase tracking-wider text-slate-400 truncate">
+                  {meta.label}
+                </span>
+              </div>
             )}
           </div>
           <button
-            className="md:hidden text-white/90 hover:text-white"
+            className="md:hidden text-slate-300 hover:text-white"
             onClick={() => setMobileNavOpen(false)}
             aria-label="Close menu"
           >
@@ -516,7 +567,7 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex bg-slate-50">
       {/* Desktop sidebar: always visible from md breakpoint up, pinned while the page scrolls */}
       <aside
-        className={`hidden md:flex md:sticky md:top-0 md:h-screen shrink-0 bg-white border-r border-slate-200 flex-col transition-[width] duration-200
+        className={`hidden md:flex md:sticky md:top-0 md:h-screen shrink-0 bg-gradient-to-b from-brand-600 via-brand-700 to-brand-900 border-r border-black/20 flex-col transition-[width] duration-200
           ${collapsed ? "w-[72px]" : "w-64"}`}
       >
         {renderSidebarContent(collapsed)}
@@ -529,7 +580,7 @@ export default function Layout({ children }) {
             className="fixed inset-0 bg-slate-900/40"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="relative z-50 w-64 max-w-[80vw] bg-white border-r border-slate-200 flex flex-col h-full">
+          <aside className="relative z-50 w-64 max-w-[80vw] bg-gradient-to-b from-brand-600 via-brand-700 to-brand-900 border-r border-black/20 flex flex-col h-full">
             {renderSidebarContent(false)}
           </aside>
         </div>
@@ -537,10 +588,13 @@ export default function Layout({ children }) {
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Page header: hamburger (mobile only) + icon/title/subtitle + date. Sticky so it stays visible while the page content scrolls. */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 backdrop-blur px-4 sm:px-6 lg:px-8 py-3.5 shrink-0">
+        <header className="relative sticky top-0 z-30 flex items-center gap-3 bg-brand-700 px-4 sm:px-6 lg:px-8 py-3.5 shrink-0">
+          {/* Signature hairline — the one gold flourish, echoing the logo mark */}
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-500/70 to-transparent" />
+
           <button
             onClick={() => setMobileNavOpen(true)}
-            className="md:hidden text-slate-500 hover:text-slate-700 -ml-1"
+            className="md:hidden text-slate-300 hover:text-white -ml-1"
             aria-label="Open menu"
           >
             <Menu size={22} />
@@ -548,7 +602,7 @@ export default function Layout({ children }) {
 
           <button
             onClick={toggleCollapsed}
-            className="hidden md:flex text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1.5 -ml-1.5 transition-colors"
+            className="hidden md:flex text-slate-300 hover:text-white hover:bg-white/10 rounded-lg p-1.5 -ml-1.5 transition-colors"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -556,16 +610,14 @@ export default function Layout({ children }) {
           </button>
 
           {PageIcon && (
-            <div
-              className={`hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.tint} border ${meta.text}`}
-            >
-              <PageIcon size={19} />
+            <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 border border-gold-500/40 text-white">
+              <PageIcon size={19} strokeWidth={2} />
             </div>
           )}
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-base sm:text-lg font-semibold text-slate-800 truncate">
+              <h1 className="text-base sm:text-lg font-semibold text-white truncate">
                 {pageTitle}
               </h1>
               {(maintenanceMode || scheduledAt) && (
@@ -576,7 +628,7 @@ export default function Layout({ children }) {
               )}
             </div>
             {pageMeta.subtitle && (
-              <p className="hidden sm:block text-xs text-slate-500 truncate">{pageMeta.subtitle}</p>
+              <p className="hidden sm:block text-xs text-slate-400 truncate">{pageMeta.subtitle}</p>
             )}
           </div>
 
@@ -584,9 +636,7 @@ export default function Layout({ children }) {
 
           {(user.role === "teacher" || user.role === "manager") && <NotificationBell />}
 
-          <div
-            className={`hidden md:flex items-center gap-2 rounded-lg ${meta.tint} border px-3 py-1.5 text-xs font-medium ${meta.text}`}
-          >
+          <div className="hidden md:flex items-center gap-2 rounded-lg bg-white/10 border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200">
             {new Date().toLocaleDateString(undefined, {
               weekday: "short",
               month: "short",

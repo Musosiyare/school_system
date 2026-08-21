@@ -57,8 +57,11 @@ export default function TeacherDashboard() {
       await Promise.all(
         uniqueClassIds.map(async (classId) => {
           const { data } = await api.get(`/classes/${classId}/students`);
-          counts[classId] = data.students.length;
-          studentsMap[classId] = data.students;
+          // Inactive students shouldn't count toward "students taught" or
+          // show up in the roster preview here.
+          const activeStudents = data.students.filter((s) => s.status !== "inactive");
+          counts[classId] = activeStudents.length;
+          studentsMap[classId] = activeStudents;
         })
       );
       setStudentCounts(counts);

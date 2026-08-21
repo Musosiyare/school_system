@@ -15,7 +15,8 @@ import RankBadge from "../components/ui/RankBadge";
 import ScoreCell from "../components/ui/ScoreCell";
 import { avatarColorFor, initialsFor } from "../utils/avatarColor";
 import { averageBand } from "../utils/gradeBands";
-import { Field, Select } from "../components/ui/FormField";
+import { Field } from "../components/ui/FormField";
+import ClassDropdown from "../components/ui/ClassDropdown";
 import { Eye, Lock, Unlock, MapPin, Printer, Files, AlertTriangle, Phone, Mail, Users, SearchX } from "lucide-react";
 
 
@@ -226,14 +227,14 @@ export default function Reports() {
       <Card>
         <div className="flex items-end gap-4 flex-wrap">
           <Field label="Class" className="min-w-[180px] flex-1 sm:flex-none">
-            <Select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
-              <option value="">Select class</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.category ? `(${c.category})` : ""}
-                </option>
-              ))}
-            </Select>
+            <ClassDropdown
+              classes={classes}
+              value={selectedClassId}
+              onChange={setSelectedClassId}
+              includeAll={false}
+              placeholder="Select class"
+              fullWidth
+            />
           </Field>
           <Field label="Term" className="min-w-[260px] flex-1 sm:flex-none">
             <div className="flex flex-wrap gap-2">

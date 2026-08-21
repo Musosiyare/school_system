@@ -83,7 +83,7 @@ const login = asyncHandler(async (req, res) => {
   // superuser/manager/teacher). Fail clearly here instead.
   if (user.role === "discipline") {
     throw ApiError.unauthorized(
-      "This account is for the discipline system (SBMS), not this one. Please log in there instead."
+      "This account can't be used to log in here. Please contact your school administrator."
     );
   }
 
@@ -110,6 +110,7 @@ const login = asyncHandler(async (req, res) => {
       role: user.role,
       schoolId: user.schoolId,
       schoolName: school?.name || null,
+      schoolLogoUrl: school?.logoUrl || null,
       mustChangePassword: user.mustChangePassword,
     },
   });
@@ -151,8 +152,8 @@ const me = asyncHandler(async (req, res) => {
   const user = await User.findByPk(req.user.id, {
     attributes: ["id", "name", "email", "role", "schoolId", "mustChangePassword"],
   });
-  const school = user.schoolId ? await School.findByPk(user.schoolId, { attributes: ["name"] }) : null;
-  res.json({ user: { ...user.toJSON(), schoolName: school?.name || null } });
+  const school = user.schoolId ? await School.findByPk(user.schoolId, { attributes: ["name", "logoUrl"] }) : null;
+  res.json({ user: { ...user.toJSON(), schoolName: school?.name || null, schoolLogoUrl: school?.logoUrl || null } });
 });
 
 // PATCH /api/auth/me — self-service profile update. Name and email; role
@@ -245,7 +246,7 @@ const verifyForgotPasswordName = asyncHandler(async (req, res) => {
   });
 
   if (!user) {
-    throw ApiError.notFound("No super admin account found with that name");
+    throw ApiError.notFound("No account found with that name");
   }
 
   res.json({ verified: true });
