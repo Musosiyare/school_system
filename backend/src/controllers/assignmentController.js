@@ -35,6 +35,22 @@ const createAssignment = asyncHandler(async (req, res) => {
   });
   if (existing) throw ApiError.conflict("This assignment already exists");
 
+  // A module can only have one teacher per class at a time — otherwise two
+  // teachers could both record marks for the same module/class. If someone
+  // else already teaches it here, the manager needs to use the reassign flow
+  // (PATCH /assignments/:id) instead of implicitly stealing it via a second
+  // POST.
+  const takenByOther = await TeacherModuleAssignment.findOne({
+    where: { moduleId, classId, academicYearId },
+    include: [{ model: User, as: "teacher", attributes: ["id", "name"] }],
+  });
+  if (takenByOther) {
+    throw ApiError.conflict(
+      `${module.moduleTitle} in this class is already assigned to ${takenByOther.teacher?.name || "another teacher"}. Use reassign instead.`,
+      "MODULE_ALREADY_ASSIGNED"
+    );
+  }
+
   const assignment = await TeacherModuleAssignment.create({
     teacherId,
     moduleId,
@@ -89,7 +105,11 @@ const listTeacherAssignments = asyncHandler(async (req, res) => {
   });
 
   if (req.user.role === "teacher") {
-    assignments = assignments.filter((a) => !a.Class?.isSuspended);
+    // A module the manager has deactivated school-wide should disappear
+    // from the teacher's own Module/Class picker entirely, same as a
+    // suspended class — there's nothing for them to record marks against
+    // there until it's reactivated.
+    assignments = assignments.filter((a) => !a.Class?.isSuspended && a.Module?.isActive !== false);
   }
 
   res.json({ assignments });

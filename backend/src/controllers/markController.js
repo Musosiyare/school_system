@@ -40,6 +40,16 @@ async function saveMarkEntries({ classId, moduleId, termId, entries, userId, sch
   const module = await Module.findOne({ where: { id: moduleId, schoolId } });
   if (!module) throw ApiError.badRequest("Invalid moduleId for this school");
 
+  // A module the manager has deactivated school-wide can't have marks
+  // recorded against it in any class or term, until it's reactivated —
+  // separate from (and checked before) the per-class-per-term disable
+  // below, which only ever affects one class+term at a time.
+  if (!module.isActive) {
+    throw ApiError.moduleDisabled(
+      `${module.moduleTitle} has been deactivated by the manager and can't have marks recorded. Reactivate it first.`
+    );
+  }
+
   // If this module has been disabled for this specific class+term (e.g. it
   // was never actually taught/tested this term), marks can't be recorded
   // against it until it's re-enabled — otherwise a score could sit

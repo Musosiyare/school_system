@@ -46,15 +46,16 @@ const ROLE_META = {
 };
 
 // Sidebar/header chrome per role — kept separate from ROLE_META above so the
-// deep gradient background (sidebar + sticky header) can differ from the
-// lighter accent tint used for in-nav badges and the profile card. Superuser
-// gets a near-black identity so it's never confused with a school view;
-// manager and teacher share a deep teal identity. Orange is the shared
+// flat background (sidebar + sticky header) can differ from the lighter
+// accent tint used for in-nav badges and the profile card. Superuser gets a
+// near-black identity so it's never confused with a school view; manager and
+// teacher share a single deep teal identity — one flat color, no gradient,
+// used identically for both the sidebar and the header. Orange is the shared
 // accent (active nav state, hairline, logo mark) across both.
 const CHROME_META = {
-  superuser: { sidebar: "from-neutral-900 via-black to-neutral-950", header: "bg-neutral-900" },
-  manager: { sidebar: "from-teal-800 via-teal-950 to-black", header: "bg-teal-950" },
-  teacher: { sidebar: "from-teal-800 via-teal-950 to-black", header: "bg-teal-950" },
+  superuser: { sidebar: "bg-neutral-950", header: "bg-neutral-950" },
+  manager: { sidebar: "bg-teal-950", header: "bg-teal-950" },
+  teacher: { sidebar: "bg-teal-950", header: "bg-teal-950" },
 };
 
 // Each role's nav is a mix of standalone links and groups. A group shows as
@@ -580,7 +581,7 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex bg-slate-50">
       {/* Desktop sidebar: always visible from md breakpoint up, pinned while the page scrolls */}
       <aside
-        className={`hidden md:flex md:sticky md:top-0 md:h-screen shrink-0 bg-gradient-to-b ${chrome.sidebar} border-r border-black/20 flex-col transition-[width] duration-200
+        className={`hidden md:flex md:sticky md:top-0 md:h-screen shrink-0 ${chrome.sidebar} border-r border-black/20 flex-col transition-[width] duration-200
           ${collapsed ? "w-[72px]" : "w-64"}`}
       >
         {renderSidebarContent(collapsed)}
@@ -593,7 +594,7 @@ export default function Layout({ children }) {
             className="fixed inset-0 bg-slate-900/40"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className={`relative z-50 w-64 max-w-[80vw] bg-gradient-to-b ${chrome.sidebar} border-r border-black/20 flex flex-col h-full`}>
+          <aside className={`relative z-50 w-64 max-w-[80vw] ${chrome.sidebar} border-r border-black/20 flex flex-col h-full`}>
             {renderSidebarContent(false)}
           </aside>
         </div>

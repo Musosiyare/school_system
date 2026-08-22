@@ -6,6 +6,11 @@ const {
   getStudentReportPdf,
   getStudentProgress,
 } = require("../controllers/reportController");
+const {
+  generateOne: generatePortalCredential,
+  peekTempPassword: peekPortalTempPassword,
+  setStatus: setPortalStatus,
+} = require("../controllers/portalCredentialController");
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
 
 router.use(authenticate, scopeToSchool);
@@ -27,5 +32,24 @@ router.get(
   getStudentReportPdf
 );
 router.get("/:studentId/progress", authorize("manager", "teacher"), getStudentProgress);
+
+// Student portal login credentials — manager can manage any student in the
+// school; a teacher is further scoped (inside the controller) to only
+// students in a class where they're the class teacher.
+router.post(
+  "/:studentId/portal-credentials/generate",
+  authorize("manager", "teacher"),
+  generatePortalCredential
+);
+router.get(
+  "/:studentId/portal-credentials/peek",
+  authorize("manager", "teacher"),
+  peekPortalTempPassword
+);
+router.patch(
+  "/:studentId/portal-credentials/status",
+  authorize("manager", "teacher"),
+  setPortalStatus
+);
 
 module.exports = router;

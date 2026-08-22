@@ -105,6 +105,7 @@ step("Assign class teacher for S2A", s, b)
 s, b = call("POST", "/students", token=manager_token, body={"classId": class_id, "firstName": "Alice", "lastName": "Mugisha"})
 b = step("Enroll student Alice Mugisha", s, b)
 student1_id = b["student"]["id"]
+student1_portal_credential = b["portalCredential"]
 
 s, b = call("POST", "/students", token=manager_token, body={"classId": class_id, "firstName": "Eric", "lastName": "Niyonzima"})
 b = step("Enroll student Eric Niyonzima", s, b)
@@ -171,5 +172,31 @@ step("Manager locks Term 1", s, b)
 
 s, b = call("POST", "/marks", token=teacher_token, body={"classId": class_id, "moduleId": math_id, "termId": term1_id, "entries": [{"studentId": student1_id, "score": 80}]})
 step("Teacher tries to edit marks after lock (should be TERM_LOCKED)", s, b)
+
+# 17. Portal credentials — auto-issued on enrollment, then managed by the
+# class teacher (Alice is the class teacher of class_id, assigned in step 9)
+print("\nAlice's enrollment already returned a portalCredential automatically:")
+print(json.dumps(student1_portal_credential, indent=2))
+assert student1_portal_credential["portalUsername"].startswith("STU")
+assert student1_portal_credential["tempPassword"]
+
+s, b = call("GET", f"/classes/{class_id}/portal-credentials", token=teacher_token)
+step("Class teacher lists portal credentials for their own class", s, b)
+assert s == 200 and len(b) == 2
+
+s, b = call("POST", f"/students/{student1_id}/portal-credentials/generate", token=teacher_token)
+step("Class teacher resets Alice's portal password", s, b)
+assert s == 200
+
+s, b = call("PATCH", f"/students/{student1_id}/portal-credentials/status", token=teacher_token, body={"status": "suspended"})
+step("Class teacher suspends student1's portal access", s, b)
+assert s == 200
+
+# 17b. A different class's portal credentials should be OFF LIMITS to a
+# teacher who isn't its class teacher (Alice is class teacher of class_id
+# only, not any other class) — expect FORBIDDEN, not a silent empty list.
+s, b = call("GET", "/classes/999999/portal-credentials", token=teacher_token)
+step("Teacher tries a class they don't teach (should be NOT FOUND or FORBIDDEN)", s, b)
+assert s in (403, 404)
 
 print("\n\nALL STEPS COMPLETED.")

@@ -208,7 +208,7 @@ body {
      labels used further down this card. The old system-font names are
      kept as a fallback chain in case the Google Font ever fails to load
      (e.g. printing while offline before it's been cached). */
-  font-family: "Lora", "Georgia", "Times New Roman", serif;
+  font-family: "Lora", "Georgia", serif;
 }
 
 /* Applied to the banner, panels, table rows, remarks and the signature row

@@ -33,18 +33,46 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
   const current = assignments.find((a) => String(a.id) === value);
   const currentStatus = current ? assignmentStatuses[current.id] : null;
 
-  function statusLabel(status) {
+function statusLabel(status) {
     if (!status) return null;
     if (status.disabled) return "⛔ Disabled this term";
+    if (status.totalStudents === 0) return "No students registered in this class";
     return status.completed
-      ? "✓ Marks completed"
+      ? "✓ Record marks completed"
       : `⚠ Missing marks (${status.totalStudents - status.recordedCount}/${status.totalStudents})`;
   }
 
   function statusColor(status) {
     if (!status) return undefined;
     if (status.disabled) return "#b45309"; // amber — matches the Disabled badge elsewhere
+    if (status.totalStudents === 0) return "#94a3b8"; // neutral slate — not a warning, just informational
     return status.completed ? "#059669" : "#dc2626";
+  }
+
+  // One assignment row's content — module title + weight/code/class badges —
+  // shared between the closed button's current-selection display and each
+  // option in the open list, so they never visually drift apart.
+  function AssignmentRow({ a }) {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5 min-w-0">
+        <span className="text-slate-800 font-medium truncate">{a.Module?.moduleTitle}</span>
+        {a.Module?.moduleCode && (
+          <span className="shrink-0 inline-flex items-center rounded-md bg-slate-100 text-slate-500 text-[11px] font-mono font-medium px-1.5 py-0.5">
+            {a.Module.moduleCode}
+          </span>
+        )}
+        {a.Module?.moduleWeight != null && (
+          <span className="shrink-0 inline-flex items-center rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold px-1.5 py-0.5">
+            /{a.Module.moduleWeight}
+          </span>
+        )}
+        {a.Class?.name && (
+          <span className="shrink-0 inline-flex items-center rounded-md bg-brand-50 text-brand-700 text-[11px] font-semibold px-1.5 py-0.5">
+            {a.Class.name}
+          </span>
+        )}
+      </span>
+    );
   }
 
   return (
@@ -55,13 +83,11 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
         className="form-field w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-left outline-none transition focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100 flex items-center justify-between gap-2 min-h-[2.75rem]"
       >
         {current ? (
-          <span className="flex flex-col min-w-0 flex-1">
-            <span className="text-slate-800 truncate min-w-0 block">
-              {current.Module?.moduleTitle} — {current.Class?.name}
-            </span>
+          <span className="flex flex-col min-w-0 flex-1 gap-0.5">
+            <AssignmentRow a={current} />
             {currentStatus && (
               <span
-                className="text-xs font-medium mt-0.5 truncate block"
+                className="text-xs font-medium truncate block"
                 style={{ color: statusColor(currentStatus) }}
               >
                 {statusLabel(currentStatus)}
@@ -85,16 +111,14 @@ function AssignmentSelect({ assignments, assignmentStatuses, value, onChange }) 
                   onChange(String(a.id));
                   setOpen(false);
                 }}
-                className={`w-full flex flex-col text-left px-3.5 py-2 text-sm hover:bg-slate-50 ${
+                className={`w-full flex flex-col text-left px-3.5 py-2 text-sm hover:bg-slate-50 gap-0.5 ${
                   String(a.id) === value ? "bg-brand-50" : ""
                 }`}
               >
-                <span className="text-slate-800 truncate block">
-                  {a.Module?.moduleTitle} — {a.Class?.name}
-                </span>
+                <AssignmentRow a={a} />
                 {status && (
                   <span
-                    className="text-xs font-medium mt-0.5 truncate block"
+                    className="text-xs font-medium truncate block"
                     style={{ color: statusColor(status) }}
                   >
                     {statusLabel(status)}

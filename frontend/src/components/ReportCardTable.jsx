@@ -367,13 +367,13 @@ export default function ReportCardTable({
           </div>
           <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: 12, lineHeight: 1.3 }}>
-              Student Name: {report.student?.name || "-"}
+              Name: {report.student?.name || "-"}
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
+              Admission No: {report.student?.admissionNumber || "-"}
             </div>
             <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
               Class: {className || report.student?.class || "-"}
-            </div>
-            <div style={{ fontWeight: 700, fontSize: 12, marginTop: 2 }}>
-              Student ID: {report.student?.admissionNumber || "-"}
             </div>
           </div>
         </div>

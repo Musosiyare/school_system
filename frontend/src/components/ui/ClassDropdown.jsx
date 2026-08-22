@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Layers, ChevronDown, Search, Check, LayoutGrid } from "lucide-react";
 
 // Deterministic accent per class name, so each class reads as a distinct
@@ -43,12 +44,21 @@ export default function ClassDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [coords, setCoords] = useState(null); // { top, left, width } in viewport coords, or null
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
   const searchRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      if (
+        wrapRef.current &&
+        !wrapRef.current.contains(e.target) &&
+        panelRef.current &&
+        !panelRef.current.contains(e.target)
+      ) {
+        setOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -64,6 +74,34 @@ export default function ClassDropdown({
       // let the panel mount before focusing
       requestAnimationFrame(() => searchRef.current?.focus());
     }
+  }, [open]);
+
+  // The trigger button can sit inside a scrollable container (most notably a
+  // Modal's body, which has overflow-auto). An `absolute`-positioned panel
+  // there gets clipped by that container instead of floating over it, which
+  // visually reads as the dropdown "collapsing" and forces the modal itself
+  // to scroll just to see the options. Rendering the panel into a portal at
+  // document.body, positioned with `fixed` coordinates taken from the
+  // trigger's own bounding rect, escapes that clipping entirely.
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    function updateCoords() {
+      const rect = wrapRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setCoords({ top: rect.bottom + 8, left: rect.left, width: rect.width });
+    }
+    updateCoords();
+    // `capture: true` so this also fires for scrolling inside a nested
+    // scrollable ancestor (like the Modal body), not just the window.
+    window.addEventListener("scroll", updateCoords, true);
+    window.addEventListener("resize", updateCoords);
+    return () => {
+      window.removeEventListener("scroll", updateCoords, true);
+      window.removeEventListener("resize", updateCoords);
+    };
   }, [open]);
 
   function handleKeyDown(e) {
@@ -128,8 +166,18 @@ export default function ClassDropdown({
         />
       </button>
 
-      {open && (
-        <div className={`absolute z-30 mt-2 ${fullWidth ? "w-full" : "w-72"} max-w-[85vw] rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5 overflow-hidden dropdown-pop`}>
+      {open && coords &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{
+              position: "fixed",
+              top: coords.top,
+              left: coords.left,
+              width: fullWidth ? coords.width : undefined,
+            }}
+            className={`z-[60] ${fullWidth ? "" : "w-72"} max-w-[85vw] rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5 overflow-hidden dropdown-pop`}
+          >
           {classes.length > 6 && (
             <div className="p-2 border-b border-slate-100 bg-slate-50/60">
               <div className="relative">
@@ -188,8 +236,9 @@ export default function ClassDropdown({
               })
             )}
           </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

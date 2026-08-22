@@ -10,10 +10,15 @@ const TONES = {
   orange: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
 };
 
-export default function Badge({ children, tone = "neutral", className = "" }) {
+const RADIUS = {
+  full: "rounded-full",
+  md: "rounded-md",
+};
+
+export default function Badge({ children, tone = "neutral", rounded = "full", className = "" }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${TONES[tone]} ${className}`}
+      className={`inline-flex items-center gap-1 ${RADIUS[rounded] || RADIUS.full} px-2.5 py-0.5 text-xs font-medium ${TONES[tone]} ${className}`}
     >
       {children}
     </span>

@@ -16,11 +16,23 @@ export default function Modal({ open, onClose, title, children, footer, size = "
     const { body } = document;
     const previousHtmlOverflow = html.style.overflow;
     const previousBodyOverflow = body.style.overflow;
+    const previousBodyPaddingRight = body.style.paddingRight;
+    // Locking scroll removes the vertical scrollbar, which instantly makes
+    // the page a few pixels wider — every fixed/sticky element (the
+    // sidebar, the sticky header) snaps to that new width, which reads as
+    // a jarring shrink/resize the moment a modal opens. Adding back that
+    // exact scrollbar width as right padding on <body> keeps the page's
+    // effective width identical while the modal is open, so nothing shifts.
+    const scrollbarWidth = window.innerWidth - html.clientWidth;
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`;
+    }
     return () => {
       html.style.overflow = previousHtmlOverflow;
       body.style.overflow = previousBodyOverflow;
+      body.style.paddingRight = previousBodyPaddingRight;
     };
   }, [open]);
 

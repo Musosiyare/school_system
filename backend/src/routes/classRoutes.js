@@ -20,6 +20,11 @@ const {
 } = require("../controllers/studentController");
 const { getClassReport, getClassReportPdf } = require("../controllers/reportController");
 const { listModuleStatus, setModuleStatus } = require("../controllers/moduleStatusController");
+const {
+  generateForClass: generatePortalCredentialsForClass,
+  listForClass: listPortalCredentialsForClass,
+  printableListForClass: printablePortalCredentialsForClass,
+} = require("../controllers/portalCredentialController");
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
 
 router.use(authenticate, scopeToSchool);
@@ -40,6 +45,25 @@ router.get("/:id/incomplete-marks", authorize("manager", "teacher"), getIncomple
 router.get("/:id/students", authorize("manager", "teacher"), listStudentsByClass);
 router.get("/:id/students/pdf", authorize("manager"), getClassStudentListPdf);
 router.get("/:id/students/excel", authorize("manager", "teacher"), getClassStudentListExcel);
+
+// Student portal login credentials for a whole class at once — manager can
+// do this for any class; a teacher is scoped (inside the controller) to
+// only a class they're the class teacher of.
+router.get(
+  "/:classId/portal-credentials",
+  authorize("manager", "teacher"),
+  listPortalCredentialsForClass
+);
+router.get(
+  "/:classId/portal-credentials/printable",
+  authorize("manager", "teacher"),
+  printablePortalCredentialsForClass
+);
+router.post(
+  "/:classId/portal-credentials/generate",
+  authorize("manager", "teacher"),
+  generatePortalCredentialsForClass
+);
 
 router.get("/:classId/term/:termId/report", authorize("manager", "teacher"), getClassReport);
 router.get("/:classId/term/:termId/report/pdf", authorize("manager", "teacher"), getClassReportPdf);

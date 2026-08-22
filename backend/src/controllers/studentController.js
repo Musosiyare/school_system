@@ -7,6 +7,7 @@ const { getCurrentAcademicYear, assertCurrentYear } = require("../utils/academic
 const { generateStudentListPdf, generateStudentRosterPdf } = require("../services/pdfService");
 const { logActivity } = require("../utils/activityLogger");
 const { getPermanentlyDismissedStudentIds, hasMisconductRecords } = require("../services/conductService");
+const { issueCredential } = require("./portalCredentialController");
 
 // POST /api/students — always enrolls into a class in the current academic
 // year, and records that enrollment so this year's roster stays correct
@@ -62,7 +63,15 @@ const createStudent = asyncHandler(async (req, res) => {
     entityId: student.id,
   });
 
-  res.status(201).json({ student });
+  // Auto-provision a student portal account right away — no separate
+  // "create account" step for staff to remember. The one-time temp
+  // password is included in this response only (never logged) so whoever
+  // registered the student can hand it over/print it immediately; it can
+  // still be recovered later via the portal-credentials "peek" endpoint
+  // until the student changes it.
+  const portalCredential = await issueCredential({ student, issuedByUserId: req.user.id });
+
+  res.status(201).json({ student, portalCredential });
 });
 
 // PUT /api/students/:studentId
@@ -281,6 +290,9 @@ const getClassStudentListExcel = asyncHandler(async (req, res) => {
   // Same as the PDF roster — this headcount banner should only reflect
   // students currently active in the class.
   const students = (await getClassRoster(req.params.id)).filter((s) => s.status !== "inactive");
+  if (students.length === 0) {
+    throw ApiError.badRequest("This class has no active students to export.");
+  }
   const boysCount = students.filter((s) => s.sex === "M").length;
   const girlsCount = students.filter((s) => s.sex === "F").length;
 

@@ -15,6 +15,7 @@ const ReportRemark = require("./ReportRemark");
 const Notification = require("./Notification");
 const SystemSetting = require("./SystemSetting");
 const ActivityLog = require("./ActivityLog");
+const StudentPortalCredential = require("./StudentPortalCredential");
 
 // School -> Users, AcademicYears, Classes, Modules, Students
 School.hasMany(User, { foreignKey: "schoolId" });
@@ -129,6 +130,12 @@ Notification.belongsTo(Term, { foreignKey: "termId" });
 User.hasMany(ActivityLog, { foreignKey: "userId" });
 ActivityLog.belongsTo(User, { foreignKey: "userId" });
 
+// Student portal login credentials — one row per student, owned by the
+// separate student-portal app's table but managed from here now (Class
+// Teacher / Students pages). See StudentPortalCredential.js for context.
+Student.hasOne(StudentPortalCredential, { foreignKey: "studentId" });
+StudentPortalCredential.belongsTo(Student, { foreignKey: "studentId" });
+
 module.exports = {
   sequelize,
   School,
@@ -147,4 +154,5 @@ module.exports = {
   Notification,
   SystemSetting,
   ActivityLog,
+  StudentPortalCredential,
 };

@@ -109,7 +109,7 @@ function overallGrade(weightedAverage) {
 
 // ---------- Banner: centered title/term on top, then a two-column row
 // below — school name/location on the left, labeled student details
-// (Student Name / Class / Student ID) on the right. Every line in the
+// (Name / Admission No / Class) on the right. Every line in the
 // banner — title, term, school, student fields — uses the same font
 // size so nothing is visually "bigger" than anything else. ----------
 const HEADER_FONT_SIZE = 12;
@@ -189,14 +189,14 @@ function letterhead(schoolName, schoolAddress, termName, admissionNumber, report
               {
                 stack: [
                   {
-                    text: `Student Name: ${report.student?.name || "-"}`,
+                    text: `Name: ${report.student?.name || "-"}`,
                     bold: true,
                     fontSize: HEADER_FONT_SIZE,
                     color: BLACK,
                     alignment: "right",
                   },
                   {
-                    text: `Class: ${className || report.student?.class || "-"}`,
+                    text: `Admission No: ${admissionNumber || "-"}`,
                     bold: true,
                     fontSize: HEADER_FONT_SIZE,
                     color: BLACK,
@@ -204,7 +204,7 @@ function letterhead(schoolName, schoolAddress, termName, admissionNumber, report
                     margin: [0, 2, 0, 0],
                   },
                   {
-                    text: `Student ID: ${admissionNumber || "-"}`,
+                    text: `Class: ${className || report.student?.class || "-"}`,
                     bold: true,
                     fontSize: HEADER_FONT_SIZE,
                     color: BLACK,

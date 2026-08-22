@@ -21,6 +21,12 @@ Module.init(
       allowNull: false,
       defaultValue: "general",
     },
+    // A manager can take a module fully out of service (independent of any
+    // one class or term) — e.g. it was retired from the curriculum. While
+    // false, teachers can no longer record marks against it in any class,
+    // and it's dropped from report cards entirely. Defaults to true so
+    // every existing/new module stays usable unless explicitly turned off.
+    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   },
   {
     sequelize,

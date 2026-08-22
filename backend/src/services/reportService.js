@@ -62,7 +62,11 @@ async function buildStudentReport(studentId, termId) {
     where: { classId: effectiveClassId, termId, disabled: true },
   });
   const disabledModuleIds = new Set(disabledStatuses.map((s) => s.moduleId));
-  const activeClassModules = classModules.filter((cm) => !disabledModuleIds.has(cm.moduleId));
+  // A module the manager has deactivated school-wide (Module.isActive)
+  // is dropped from every report the same way, regardless of class/term.
+  const activeClassModules = classModules.filter(
+    (cm) => !disabledModuleIds.has(cm.moduleId) && cm.Module?.isActive !== false
+  );
 
   const marks = await Mark.findAll({
     where: { studentId, termId },

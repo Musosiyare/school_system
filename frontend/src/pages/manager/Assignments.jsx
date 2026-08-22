@@ -6,6 +6,7 @@ import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import { Field, Select } from "../../components/ui/FormField";
 import ClassDropdown from "../../components/ui/ClassDropdown";
+import { Table, Thead, Th, Td, EmptyRow } from "../../components/ui/Table";
 import { ErrorText } from "../../components/ui/Alerts";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useNotify } from "../../components/ui/NotifyProvider";
@@ -106,6 +107,16 @@ export default function Assignments() {
   }
 
   function toggleModule(moduleId) {
+    // A module already taught by someone else in this class can't be picked
+    // up here — the manager has to use Reassign for that instead, so an
+    // already-taken module is never a togglable option in this list.
+    const takenByOther = assignments.some(
+      (a) =>
+        String(a.classId) === String(classId) &&
+        a.moduleId === moduleId &&
+        String(a.teacherId) !== String(teacherId)
+    );
+    if (takenByOther) return;
     setCheckedModuleIds((ids) =>
       ids.includes(moduleId) ? ids.filter((id) => id !== moduleId) : [...ids, moduleId]
     );
@@ -116,7 +127,15 @@ export default function Assignments() {
     setError("");
     setSaving(true);
     try {
-      const toAdd = checkedModuleIds.filter((id) => !existingModuleIdsForTeacher.includes(id));
+      const toAdd = checkedModuleIds.filter((id) => {
+        if (existingModuleIdsForTeacher.includes(id)) return false;
+        // Defensive: never submit a module that's already taken by another
+        // teacher in this class, even if stale state let it get checked.
+        const takenByOther = assignments.some(
+          (a) => String(a.classId) === String(classId) && a.moduleId === id && String(a.teacherId) !== String(teacherId)
+        );
+        return !takenByOther;
+      });
       const toRemove = assignments.filter(
         (a) =>
           String(a.classId) === String(classId) &&
@@ -281,27 +300,41 @@ export default function Assignments() {
                 </button>
 
                 {isExpanded && (
-                  <div className="divide-y divide-slate-100">
-                    {g.rows.map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex items-center justify-between gap-3 px-4 py-2.5 flex-wrap"
-                      >
-                        <div className="flex items-center gap-2 flex-wrap text-sm">
-                          <span className="font-medium text-slate-700">{a.Module?.moduleTitle}</span>
-                          <span className="text-slate-300">·</span>
-                          <Badge tone="manager">{a.Class?.name}</Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => openReassign(a)}>
-                            <Repeat size={14} /> Reassign
-                          </Button>
-                          <Button size="sm" variant="danger" onClick={() => handleRemove(a)}>
-                            <Trash2 size={14} /> Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="p-3">
+                    <Table>
+                      <Thead>
+                        <tr>
+                          <Th className="w-28">Code</Th>
+                          <Th>Module</Th>
+                          <Th>Class</Th>
+                          <Th className="w-24">Weight</Th>
+                          <Th className="w-56 text-right">Actions</Th>
+                        </tr>
+                      </Thead>
+                      <tbody>
+                        {g.rows.length === 0 && <EmptyRow colSpan={5}>No assignments for this teacher.</EmptyRow>}
+                        {g.rows.map((a) => (
+                          <tr key={a.id} className="hover:bg-slate-50/80">
+                            <Td className="font-mono text-xs text-slate-500">{a.Module?.moduleCode}</Td>
+                            <Td className="font-medium text-slate-700">{a.Module?.moduleTitle}</Td>
+                            <Td>
+                              <Badge tone="manager">{a.Class?.name}</Badge>
+                            </Td>
+                            <Td className="tabular-nums text-slate-500">{a.Module?.moduleWeight}</Td>
+                            <Td>
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="secondary" onClick={() => openReassign(a)}>
+                                  <Repeat size={14} /> Reassign
+                                </Button>
+                                <Button size="sm" variant="danger" onClick={() => handleRemove(a)}>
+                                  <Trash2 size={14} /> Remove
+                                </Button>
+                              </div>
+                            </Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
                   </div>
                 )}
               </div>
@@ -380,18 +413,24 @@ export default function Assignments() {
                   return (
                     <label
                       key={m.id}
-                      className="flex items-center gap-2 text-sm text-slate-700 rounded-md px-2 py-1.5 hover:bg-slate-50 cursor-pointer"
+                      className={`flex items-center gap-2 text-sm rounded-md px-2 py-1.5 ${
+                        takenByOther
+                          ? "text-slate-400 cursor-not-allowed"
+                          : "text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      }`}
+                      title={takenByOther ? `Already assigned to ${takenByOther.teacher?.name} — use Reassign to move it` : undefined}
                     >
                       <input
                         type="checkbox"
                         checked={checkedModuleIds.includes(m.id)}
                         onChange={() => toggleModule(m.id)}
-                        className="rounded border-slate-300 text-brand-500 focus:ring-brand-400"
+                        disabled={!!takenByOther}
+                        className="rounded border-slate-300 text-brand-500 focus:ring-brand-400 disabled:cursor-not-allowed"
                       />
                       {m.moduleTitle}
                       {takenByOther && (
                         <span className="text-xs text-amber-600">
-                          (currently {takenByOther.teacher?.name})
+                          (taken — {takenByOther.teacher?.name})
                         </span>
                       )}
                     </label>
@@ -401,8 +440,8 @@ export default function Assignments() {
             )}
             <p className="text-xs text-slate-400 mt-2">
               Checking a module assigns it to this teacher; unchecking one that was already assigned
-              to them removes that assignment. Checking a module already taught by someone else here
-              reassigns it to this teacher instead.
+              to them removes that assignment. Modules already taught by someone else in this class
+              are locked here — use Reassign on that assignment instead.
             </p>
           </div>
 

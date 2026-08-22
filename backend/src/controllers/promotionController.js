@@ -77,8 +77,9 @@ const getPromotionRoster = asyncHandler(async (req, res) => {
 // must belong to a DIFFERENT academic year from sourceClassId — this
 // endpoint is specifically for pulling students across years. Each
 // selected student is COPIED into a brand-new Student row in destClass,
-// with its own fresh admission number and a new StudentEnrollment for the
-// destination year. The original student is never modified in any way —
+// keeping their original admission number (it's the same student, just
+// carried forward into a new class/year) and a new StudentEnrollment for
+// the destination year. The original student is never modified in any way —
 // they stay exactly where they were, in their original class, with all
 // their marks and history untouched. That's the whole point of "pulling":
 // it's a copy, not a cut.
@@ -188,12 +189,20 @@ const promoteStudents = asyncHandler(async (req, res) => {
           { transaction: t }
         );
 
-        copy.admissionNumber = generateStudentId({
-          schoolId: req.schoolId,
-          className: destClass.name,
-          academicYearName: destAcademicYear ? destAcademicYear.name : null,
-          insertionId: copy.id,
-        });
+        // Keep the student's original admission number instead of minting a
+        // new one — a pulled/promoted student is still the same student,
+        // just carried into a new class/year, so their admission number
+        // should follow them rather than multiply. Only fall back to
+        // generating a fresh one if the original never had one for some
+        // reason.
+        copy.admissionNumber =
+          student.admissionNumber ||
+          generateStudentId({
+            schoolId: req.schoolId,
+            className: destClass.name,
+            academicYearName: destAcademicYear ? destAcademicYear.name : null,
+            insertionId: copy.id,
+          });
         await copy.save({ transaction: t });
 
         await StudentEnrollment.create(

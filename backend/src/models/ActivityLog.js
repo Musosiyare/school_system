@@ -35,7 +35,14 @@ ActivityLog.init(
       // Every real query filters by userId and sorts by createdAt DESC —
       // this index lets MySQL satisfy both from the index itself instead
       // of scanning + sorting the whole table as it grows.
-      { fields: ["userId", "createdAt"] },
+      //
+      // NOTE: index `fields` need actual DB column names, not model
+      // attribute names — unlike `where`/`order` elsewhere, Sequelize does
+      // NOT run these through the underscored: true mapping. This was
+      // previously "userId", "createdAt", which don't exist as columns
+      // (they're user_id, created_at) and made sequelize.sync({ alter:
+      // true }) fail with "Key column 'userId' doesn't exist in table".
+      { fields: ["user_id", "created_at"] },
     ],
   }
 );

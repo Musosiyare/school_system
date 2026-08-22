@@ -7,6 +7,7 @@ import Badge from "../../components/ui/Badge";
 import Tabs from "../../components/ui/Tabs";
 import Modal from "../../components/ui/Modal";
 import Button from "../../components/ui/Button";
+import PortalCredentialsModal from "../../components/PortalCredentialsModal";
 import {
   BookOpen,
   Layers,
@@ -20,6 +21,7 @@ import {
   Phone,
   UserCircle,
   FileSpreadsheet,
+  KeyRound,
 } from "lucide-react";
 
 export default function TeacherDashboard() {
@@ -35,6 +37,7 @@ export default function TeacherDashboard() {
   const classTeacherRef = useRef(null);
   const [showStudentsModal, setShowStudentsModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState(null);
+  const [credentialsClass, setCredentialsClass] = useState(null); // { id, name } or null
 
   useEffect(() => {
     (async () => {
@@ -212,6 +215,11 @@ export default function TeacherDashboard() {
       accent: "from-violet-400 to-violet-600",
       onClick: focusClassTeacher,
       clickable: classesTaught.length > 0,
+      // Class names can run long once a teacher is class teacher for more
+      // than one class, so this value drops to a smaller size than the
+      // other (always-numeric) stat tiles once there's more than one name
+      // to fit, rather than truncating them behind an ellipsis.
+      valueClassName: classesTaught.length > 1 ? "text-sm" : "text-xl",
     },
   ];
 
@@ -251,7 +259,7 @@ export default function TeacherDashboard() {
             </div>
             <div className="min-w-0 flex-1">
               <div
-                className="text-xl font-bold text-slate-800 leading-tight truncate"
+                className={`font-bold text-slate-800 leading-tight truncate ${s.valueClassName || "text-xl"}`}
                 title={typeof s.value === "string" ? s.value : undefined}
               >
                 {loading ? "…" : s.value}
@@ -296,16 +304,28 @@ export default function TeacherDashboard() {
             }
             subtitle="You're responsible for remarks and overall report sign-off for these classes."
           >
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2.5">
               {classesTaught.map((c) => (
-                <button
+                <div
                   key={c.id}
-                  type="button"
-                  onClick={() => openStudentsModal(c.id)}
-                  className="rounded-full transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3.5 py-2.5"
                 >
-                  <Badge tone="teacher">{c.name}</Badge>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => openStudentsModal(c.id)}
+                    className="rounded-md transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                  >
+                    <Badge tone="orange" rounded="md">{c.name}</Badge>
+                  </button>
+                  <Button
+                    size="sm"
+                    variant="dark"
+                    onClick={() => setCredentialsClass({ id: c.id, name: c.name })}
+                  >
+                    <KeyRound size={14} />
+                    Manage Portal Credentials
+                  </Button>
+                </div>
               ))}
             </div>
           </Card>
@@ -468,7 +488,9 @@ export default function TeacherDashboard() {
               <button
                 type="button"
                 onClick={() => downloadStudentsExcel(selectedClassId, selectedClassInfo?.className)}
-                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-teacher bg-white border border-teacher/30 hover:bg-teacher/10 px-2.5 py-1.5 rounded-md transition"
+                disabled={selectedClassStudents.length === 0}
+                title={selectedClassStudents.length === 0 ? "No students in this class" : undefined}
+                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-teacher bg-white border border-teacher/30 hover:bg-teacher/10 px-2.5 py-1.5 rounded-md transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
               >
                 <FileSpreadsheet size={13} />
                 Download Excel
@@ -567,6 +589,13 @@ export default function TeacherDashboard() {
           </div>
         )}
       </Modal>
+
+      <PortalCredentialsModal
+        open={!!credentialsClass}
+        onClose={() => setCredentialsClass(null)}
+        classId={credentialsClass?.id}
+        className={credentialsClass?.name}
+      />
     </div>
   );
 }

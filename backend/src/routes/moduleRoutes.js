@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { createModule, listModules, updateModule, deleteModule } = require("../controllers/moduleController");
+const { createModule, listModules, updateModule, deleteModule, setModuleActive } = require("../controllers/moduleController");
 const { authenticate, authorize, scopeToSchool } = require("../middleware/auth");
 
 router.use(authenticate, scopeToSchool);
@@ -7,6 +7,7 @@ router.use(authenticate, scopeToSchool);
 router.post("/", authorize("manager"), createModule);
 router.get("/", authorize("manager", "teacher"), listModules);
 router.patch("/:id", authorize("manager"), updateModule);
+router.patch("/:id/status", authorize("manager"), setModuleActive);
 router.delete("/:id", authorize("manager"), deleteModule);
 
 module.exports = router;

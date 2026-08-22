@@ -7,6 +7,10 @@ const VARIANTS = {
   teal: "bg-teal-500 text-white hover:bg-teal-600",
   violet: "bg-violet-600 text-white hover:bg-violet-700",
   amber: "bg-amber-500 text-white hover:bg-amber-600",
+  // Same deep teal used for the manager/teacher sidebar + header, for
+  // buttons that should read as part of that same dark chrome (e.g. the
+  // "Manage Portal Credentials" action) rather than a bright accent color.
+  dark: "bg-teal-950 text-white hover:bg-teal-900",
   // For use on top of dark/navy surfaces (e.g. the brand-colored class
   // picker card), where the default `primary`/`secondary` variants would
   // blend into the background instead of standing out from it.

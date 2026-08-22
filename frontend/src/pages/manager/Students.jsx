@@ -6,6 +6,8 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Pagination from "../../components/ui/Pagination";
 import ArchivedYearBanner from "../../components/ArchivedYearBanner";
+import PortalCredentialsModal from "../../components/PortalCredentialsModal";
+import { openCredentialsPrintWindow } from "../../utils/printCredentials";
 import { useYear } from "../../context/YearContext";
 import { usePagination } from "../../hooks/usePagination";
 import { useSort } from "../../hooks/useSort";
@@ -35,6 +37,7 @@ import {
   Ban,
   Check,
   CheckCircle2,
+  KeyRound,
 } from "lucide-react";
 
 const emptyForm = { firstName: "", lastName: "", dob: "", sex: "", guardianName: "", guardianPhone: "" };
@@ -62,7 +65,7 @@ function sexLabel(sex) {
 export default function Students() {
   const confirm = useConfirm();
   const notify = useNotify();
-  const { viewingYearId, isCurrentView } = useYear();
+  const { viewingYearId, viewingYear, isCurrentView } = useYear();
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [students, setStudents] = useState([]);
@@ -72,6 +75,7 @@ export default function Students() {
   const [formClassId, setFormClassId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [newAccountCredential, setNewAccountCredential] = useState(null); // portal credential just auto-issued for a newly created student
   const [query, setQuery] = useState("");
   const [sexFilter, setSexFilter] = useState(""); // "" = all, "M" = boys, "F" = girls
   const [statusFilter, setStatusFilter] = useState("active"); // "" = all, "active", "inactive"
@@ -89,6 +93,31 @@ export default function Students() {
   const highlightParam = searchParams.get("highlight");
   const highlightRowRef = useRef(null);
   const [highlightId, setHighlightId] = useState(null);
+
+  // --- Registration entry point: manager first chooses whether this is a
+  // brand-new student (never in the school before) or a student who's
+  // already in the school system (being pulled into this class from
+  // another year/class). This choice determines which flow opens next —
+  // Enroll Student has no path to "Pull", and Pull Students never shows
+  // the new-registration form — so a manager can't accidentally create a
+  // duplicate record for someone who already exists.
+  const [choosingEntryType, setChoosingEntryType] = useState(false);
+  const [showPortalCredentials, setShowPortalCredentials] = useState(false);
+
+  function openEntryChoice() {
+    if (!selectedClassId) return;
+    setChoosingEntryType(true);
+  }
+
+  function chooseNewStudent() {
+    setChoosingEntryType(false);
+    openCreate();
+  }
+
+  function chooseExistingStudent() {
+    setChoosingEntryType(false);
+    openPull();
+  }
 
   // --- Pull Students (copy from another class/year into the class
   // currently being viewed) ---
@@ -222,7 +251,8 @@ export default function Students() {
       if (editingStudent) {
         await api.put(`/students/${editingStudent.id}`, { classId: Number(formClassId), ...form });
       } else {
-        await api.post("/students", { classId: Number(formClassId), ...form });
+        const { data } = await api.post("/students", { classId: Number(formClassId), ...form });
+        if (data.portalCredential) setNewAccountCredential(data.portalCredential);
       }
       closeModal();
       await loadStudents(selectedClassId);
@@ -475,11 +505,15 @@ export default function Students() {
 
           {isCurrentView && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outlineLight" onClick={openPull} disabled={!selectedClassId}>
-                <CopyPlus size={16} /> Pull Students
-              </Button>
-              <Button variant="light" onClick={openCreate} disabled={!selectedClassId}>
+              <Button variant="light" onClick={openEntryChoice} disabled={!selectedClassId}>
                 <Plus size={16} /> Enroll Student
+              </Button>
+              <Button
+                variant="dark"
+                onClick={() => setShowPortalCredentials(true)}
+                disabled={!selectedClassId}
+              >
+                <KeyRound size={16} /> Portal Credentials
               </Button>
             </div>
           )}
@@ -741,6 +775,66 @@ export default function Students() {
       )}
 
       <Modal
+        open={choosingEntryType}
+        onClose={() => setChoosingEntryType(false)}
+        title="Enroll a Student"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-2.5 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3">
+            <CalendarDays size={16} className="shrink-0 text-brand-500" />
+            <p className="text-xs leading-relaxed text-slate-600">
+              Registering into <span className="font-semibold text-slate-800">{selectedClass?.name}</span>
+              {" · "}
+              <span className="font-semibold text-slate-800">{viewingYear?.name || "current year"}</span>
+            </p>
+          </div>
+
+          <p className="text-sm text-slate-500">Is this student new to the school, or already enrolled somewhere in the system?</p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={chooseExistingStudent}
+              className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-slate-200 p-4 text-left transition hover:border-teal-400 hover:bg-teal-50/50 hover:shadow-md"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-100 text-teal-600 transition group-hover:bg-teal-500 group-hover:text-white">
+                <CopyPlus size={20} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Already in the School</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  Already has a record in another class or academic year. Pull it in — no new registration needed.
+                </p>
+              </div>
+              <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-teal-600 group-hover:gap-1.5 transition-all">
+                Pull existing <ArrowRight size={13} />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={chooseNewStudent}
+              className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-slate-200 p-4 text-left transition hover:border-brand-400 hover:bg-brand-50/50 hover:shadow-md"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-100 text-brand-600 transition group-hover:bg-brand-500 group-hover:text-white">
+                <Plus size={20} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">New Student</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  First time in the school. Opens a blank form to create their record from scratch.
+                </p>
+              </div>
+              <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-brand-600 group-hover:gap-1.5 transition-all">
+                Enroll new <ArrowRight size={13} />
+              </span>
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={creating}
         onClose={closeModal}
         title={
@@ -898,7 +992,7 @@ export default function Students() {
                     setPullSourceClassId("");
                   }}
                 >
-                  <option value="">Select year (all years shown)</option>
+                  <option value="">Select year</option>
                   {allYears
                     .filter((y) => String(y.id) !== String(selectedClass?.academicYearId))
                     .map((y) => (
@@ -1023,6 +1117,53 @@ export default function Students() {
 
           <ErrorText>{pullError}</ErrorText>
         </div>
+      </Modal>
+
+      <PortalCredentialsModal
+        open={showPortalCredentials}
+        onClose={() => setShowPortalCredentials(false)}
+        classId={selectedClassId}
+        className={selectedClass?.name}
+      />
+
+      <Modal
+        open={!!newAccountCredential}
+        onClose={() => setNewAccountCredential(null)}
+        title="Portal account created — write this down now"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                openCredentialsPrintWindow("New Portal Credential", [newAccountCredential])
+              }
+            >
+              Print
+            </Button>
+            <Button onClick={() => setNewAccountCredential(null)}>Done</Button>
+          </>
+        }
+      >
+        {newAccountCredential && (
+          <>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              This temporary password can only be viewed again until the student changes it — from the class's
+              Portal Credentials panel — so print or share it now.
+            </p>
+            <div className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <div className="font-medium text-slate-800 text-sm">{newAccountCredential.studentName}</div>
+                <div className="text-xs text-slate-400">
+                  Adm. {newAccountCredential.admissionNumber || "—"} · Portal ID: {newAccountCredential.portalUsername}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-slate-400">Temp password</div>
+                <div className="font-mono font-semibold text-slate-800">{newAccountCredential.tempPassword}</div>
+              </div>
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );

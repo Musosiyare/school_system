@@ -1,6 +1,7 @@
 const { Module, Class, ClassModule, TeacherModuleAssignment, Mark } = require("../models");
 const ApiError = require("../utils/ApiError");
 const asyncHandler = require("../utils/asyncHandler");
+const { logActivity } = require("../utils/activityLogger");
 
 // Module weight and max score used to be two separate fields that were
 // always meant to be the same number in practice, which just meant filling
@@ -147,4 +148,35 @@ const deleteModule = asyncHandler(async (req, res) => {
   res.json({ message: "Module deleted" });
 });
 
-module.exports = { createModule, listModules, updateModule, deleteModule };
+// PATCH /api/modules/:id/status — deactivate/reactivate a module school-wide.
+// While isActive is false, teachers can no longer record marks for this
+// module in ANY class (see markController's saveMarkEntries), it's dropped
+// from every teacher's Module/Class picker, and it's excluded from report
+// cards (see reportService) — unlike ClassModuleTermStatus, which only ever
+// affects one class+term at a time, this is a single school-wide switch on
+// the module itself.
+const setModuleActive = asyncHandler(async (req, res) => {
+  const { isActive } = req.body;
+  if (typeof isActive !== "boolean") {
+    throw ApiError.badRequest("isActive (boolean) is required");
+  }
+
+  const module = await Module.findOne({ where: { id: req.params.id, schoolId: req.schoolId } });
+  if (!module) throw ApiError.notFound("Module not found");
+
+  module.isActive = isActive;
+  await module.save();
+
+  await logActivity({
+    userId: req.user.id,
+    schoolId: req.schoolId,
+    action: isActive ? "module.activated" : "module.deactivated",
+    description: `${isActive ? "Reactivated" : "Deactivated"} ${module.moduleTitle} (${module.moduleCode})`,
+    entityType: "module",
+    entityId: module.id,
+  });
+
+  res.json({ module });
+});
+
+module.exports = { createModule, listModules, updateModule, deleteModule, setModuleActive };
